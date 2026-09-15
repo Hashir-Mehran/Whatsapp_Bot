@@ -12,12 +12,16 @@ app.get('/', (req, res) => {
   res.send('WhatsApp Bot is running live!');
 });
 
+app.get('/ping', (req, res) => {
+  res.send('Pong! Health check OK.');
+});
+
 app.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
 });
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const MONGO_URI = process.env.MONGO_URI; // MongoDB Connection String
+const MONGO_URI = process.env.MONGO_URI;
 
 if (!GEMINI_API_KEY || !MONGO_URI) {
     console.error("ERROR: GEMINI_API_KEY ya MONGO_URI missing hai!");
@@ -28,7 +32,6 @@ const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const pausedChats = new Set();
 const chatHistories = {};
 
-// MongoDB Auth State Handler Function
 async function useMongoDBAuthState(collection) {
     const writeData = (data, id) => {
         return collection.replaceOne(
@@ -91,7 +94,7 @@ Tum Sargodha, Pakistan me ek premier Electric & Smart Switch Store ke highly pro
 Tumhara maqsad WhatsApp par aane wale customers ke sawalat ka jawab dena, unki zaroorat ke mutabiq products suggest karna, aur orders confirm karwana hai.
 
 ==================================================
-1. LANGUAGE & TONEOF VOICE:
+1. LANGUAGE & TONE OF VOICE:
 ==================================================
 - Hamesha natural, polite aur professional Roman Urdu (ya Urdu) me jawab do.
 - Conversational aur welcoming style rakho (e.g., "Assalam-o-Alaikum! Switch Store me khushamdeed!").
@@ -137,7 +140,6 @@ Tumhara maqsad WhatsApp par aane wale customers ke sawalat ka jawab dena, unki z
 `;
 
 async function connectToWhatsApp() {
-    // MongoDB Connection
     const client = new MongoClient(MONGO_URI);
     await client.connect();
     const db = client.db('whatsapp_bot');
@@ -147,12 +149,16 @@ async function connectToWhatsApp() {
     
     const sock = makeWASocket({
         auth: state,
-        printQRInTerminal: false
+        printQRInTerminal: false,
+        keepAliveIntervalMs: 25000,
+        connectTimeoutMs: 60000,
+        defaultQueryTimeoutMs: 60000,
+        syncFullHistory: false
     });
 
     sock.ev.on('creds.update', saveCreds);
 
-    sock.ev.on('connection.update', (update) => {
+    sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
@@ -163,13 +169,21 @@ async function connectToWhatsApp() {
         }
 
         if (connection === 'close') {
-            const shouldReconnect = (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut);
-            console.log('Connection close ho gaya. Reconnecting...', shouldReconnect);
-            if (shouldReconnect) {
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+            console.log(`Connection drop. StatusCode: ${statusCode}. Reconnecting: ${shouldReconnect}`);
+
+            if (statusCode === DisconnectReason.loggedOut) {
+                console.log("Session Logged Out! Database cleared.");
+                await collection.deleteMany({});
                 connectToWhatsApp();
+            } else if (shouldReconnect) {
+                setTimeout(() => {
+                    connectToWhatsApp();
+                }, 3000);
             }
         } else if (connection === 'open') {
-            console.log('\nSUCCESS: WhatsApp Bot Successfully Connected!\n');
+            console.log('\nSUCCESS: WhatsApp Bot Successfully Connected & Alive!\n');
         }
     });
 
@@ -196,10 +210,17 @@ async function connectToWhatsApp() {
             }
             if (cleanText === 'start') {
                 pausedChats.delete(sender);
+                chatHistories[sender] = []; // Fresh start ke liye history reset
                 await sock.sendMessage(sender, { delete: m.key });
+                console.log(`Chat history reset for: ${sender}`);
                 return;
             }
             chatHistories[sender].push({ role: 'model', parts: [{ text: text }] });
+            
+            // Limit owner side history to last 10 messages
+            if (chatHistories[sender].length > 10) {
+                chatHistories[sender] = chatHistories[sender].slice(-10);
+            }
             return;
         }
 
@@ -209,11 +230,12 @@ async function connectToWhatsApp() {
 
         try {
             const model = genAI.getGenerativeModel({ 
-                model: "gemini-2.5-flash",
+                model: "gemini-1.5-flash",
                 systemInstruction: systemPrompt 
             });
 
-            const historyForGemini = chatHistories[sender].slice(0, -1);
+            // Exact last 10 messages Gemini ko pass honge
+            const historyForGemini = chatHistories[sender].slice(-10).slice(0, -1);
             const chat = model.startChat({ history: historyForGemini });
 
             const result = await chat.sendMessage(text);
@@ -221,8 +243,9 @@ async function connectToWhatsApp() {
 
             chatHistories[sender].push({ role: 'model', parts: [{ text: responseText }] });
 
-            if (chatHistories[sender].length > 20) {
-                chatHistories[sender] = chatHistories[sender].slice(-20);
+            // Maintain exact last 10 messages in array
+            if (chatHistories[sender].length > 10) {
+                chatHistories[sender] = chatHistories[sender].slice(-10);
             }
 
             await sock.sendMessage(sender, { text: responseText });
