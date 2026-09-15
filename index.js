@@ -13,6 +13,9 @@ if (!GEMINI_API_KEY) {
 
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
+// Specific chats ko pause rakhne ke liye Set
+const pausedChats = new Set();
+
 // 2. Business Details & System Prompt
 const systemPrompt = `
 Tum Sargodha, Pakistan me ek Switch Store ke professional sales assistant ho.
@@ -70,14 +73,54 @@ async function connectToWhatsApp() {
     // Customer message receiving & reply handling
     sock.ev.on('messages.upsert', async ({ messages }) => {
         const m = messages[0];
-        
-        if (!m.message || m.key.fromMe) return;
+        if (!m.message) return;
 
         const sender = m.key.remoteJid;
-        const text = m.message.conversation || m.message.extendedTextMessage?.text;
+        const isFromMe = m.key.fromMe; // True agar message aap ne (Owner ne) bheja hai
+        const text = (m.message.conversation || m.message.extendedTextMessage?.text || "").trim();
 
         if (!text) return;
 
+        // ==========================================
+        // 1. OWNER COMMANDS (Silent Delete Commands)
+        // ==========================================
+        if (isFromMe) {
+            const cleanText = text.toLowerCase();
+
+            // Command: "off" -> Current chat me AI pause ho jayega
+            if (cleanText === 'off') {
+                pausedChats.add(sender);
+                // Command message ko client ke dekhne se pehle delete kar do
+                await sock.sendMessage(sender, { delete: m.key });
+                console.log(`[BOT PAUSED] AI status for ${sender} is now OFF`);
+                return;
+            }
+
+            // Command: "start" -> Current chat me AI dobara active ho jayega
+            if (cleanText === 'start') {
+                pausedChats.delete(sender);
+                // Command message ko delete kar do
+                await sock.sendMessage(sender, { delete: m.key });
+                console.log(`[BOT ACTIVE] AI status for ${sender} is now ACTIVE`);
+                return;
+            }
+
+            // Client ko owner ke aam messages par AI reply trigger nahi hone dena
+            return;
+        }
+
+        // ==========================================
+        // 2. PAUSE CHECK (Client chat validation)
+        // ==========================================
+        // Agar aap ne is client ke liye bot off kiya hua hai toh AI reply nahi karega
+        if (pausedChats.has(sender)) {
+            console.log(`[IGNORED] AI is PAUSED for customer (${sender})`);
+            return;
+        }
+
+        // ==========================================
+        // 3. AI REPLY GENERATION
+        // ==========================================
         console.log(`Customer Message (${sender}): ${text}`);
 
         try {
