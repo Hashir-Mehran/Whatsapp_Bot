@@ -2,6 +2,19 @@ require('dotenv').config();
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+
+// Render health check route
+app.get('/', (req, res) => {
+  res.send('WhatsApp Bot is running live!');
+});
+
+app.listen(PORT, () => {
+  console.log(`Server listening on port ${PORT}`);
+});
 
 // 1. Environment variable se API Key load karna
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
