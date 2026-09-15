@@ -9,15 +9,15 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-  res.send('WhatsApp Bot is running live!');
+    res.send('WhatsApp Bot is running live!');
 });
 
 app.get('/ping', (req, res) => {
-  res.send('Pong! Health check OK.');
+    res.send('Pong! Health check OK.');
 });
 
 app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+    console.log(`Server listening on port ${PORT}`);
 });
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -146,7 +146,7 @@ async function connectToWhatsApp() {
     const collection = db.collection('auth_session');
 
     const { state, saveCreds } = await useMongoDBAuthState(collection);
-    
+
     const sock = makeWASocket({
         auth: state,
         printQRInTerminal: false,
@@ -192,7 +192,7 @@ async function connectToWhatsApp() {
         if (!m.message) return;
 
         const sender = m.key.remoteJid;
-        const isFromMe = m.key.fromMe; 
+        const isFromMe = m.key.fromMe;
         const text = (m.message.conversation || m.message.extendedTextMessage?.text || "").trim();
 
         if (!text) return;
@@ -216,7 +216,7 @@ async function connectToWhatsApp() {
                 return;
             }
             chatHistories[sender].push({ role: 'model', parts: [{ text: text }] });
-            
+
             // Limit owner side history to last 10 messages
             if (chatHistories[sender].length > 10) {
                 chatHistories[sender] = chatHistories[sender].slice(-10);
@@ -229,9 +229,9 @@ async function connectToWhatsApp() {
         if (pausedChats.has(sender)) return;
 
         try {
-            const model = genAI.getGenerativeModel({ 
-                model: "gemini-1.5-flash",
-                systemInstruction: systemPrompt 
+            const model = genAI.getGenerativeModel({
+                model: "gemini-1.5-flash-latest",
+                systemInstruction: systemPrompt
             });
 
             // Exact last 10 messages Gemini ko pass honge
