@@ -15,6 +15,7 @@
     "@whiskeysockets/baileys": "^7.0.0-rc14",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "mongodb": "^7.6.0",
     "qrcode-terminal": "^0.12.0"
   }
 }
