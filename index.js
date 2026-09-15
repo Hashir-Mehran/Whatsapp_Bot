@@ -5,6 +5,10 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const express = require('express');
 const { MongoClient } = require('mongodb');
 
+const dns = require('node:dns');
+dns.setDefaultResultOrder('ipv4first');
+dns.setServers(['8.8.8.8', '8.8.4.4']);
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -32,6 +36,14 @@ const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const pausedChats = new Set();
 const chatHistories = {};
 
+
+// Available models print karne ke liye
+async function checkModels() {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`);
+    const data = await response.json();
+    console.log("Available Models:", data.models?.map(m => m.name));
+}
+checkModels();
 async function useMongoDBAuthState(collection) {
     const writeData = (data, id) => {
         return collection.replaceOne(
@@ -64,9 +76,6 @@ async function useMongoDBAuthState(collection) {
                     await Promise.all(
                         ids.map(async (id) => {
                             let value = await readData(`${type}-${id}`);
-                            if (type === 'app-state-sync-key' && value) {
-                                value = value;
-                            }
                             data[id] = value;
                         })
                     );
@@ -217,33 +226,31 @@ async function connectToWhatsApp() {
             }
             chatHistories[sender].push({ role: 'model', parts: [{ text: text }] });
 
-            // Limit owner side history to last 10 messages
             if (chatHistories[sender].length > 10) {
                 chatHistories[sender] = chatHistories[sender].slice(-10);
             }
             return;
         }
 
-        chatHistories[sender].push({ role: 'user', parts: [{ text: text }] });
-
         if (pausedChats.has(sender)) return;
 
         try {
-            const model = genAI.getGenerativeModel({
-                model: "gemini-1.5-flash-latest",
-                systemInstruction: systemPrompt
+            // Updated Official Model Name (gemini-1.5-flash)
+            const model = genAI.getGenerativeModel({ 
+                model: "gemini-3.6-flash",
+                systemInstruction: systemPrompt 
             });
 
-            // Exact last 10 messages Gemini ko pass honge
-            const historyForGemini = chatHistories[sender].slice(-10).slice(0, -1);
+            const historyForGemini = chatHistories[sender].slice(-10);
             const chat = model.startChat({ history: historyForGemini });
 
             const result = await chat.sendMessage(text);
             const responseText = result.response.text();
 
+            // History Update after response
+            chatHistories[sender].push({ role: 'user', parts: [{ text: text }] });
             chatHistories[sender].push({ role: 'model', parts: [{ text: responseText }] });
 
-            // Maintain exact last 10 messages in array
             if (chatHistories[sender].length > 10) {
                 chatHistories[sender] = chatHistories[sender].slice(-10);
             }
