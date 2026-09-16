@@ -304,7 +304,6 @@ async function startBot() {
             if (isFromMe && text) {
                 const cleanText = text.toLowerCase();
 
-                // Bot Control Commands
                 if (cleanText === 'off') {
                     pausedChats.add(sender);
                     try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) { }
@@ -317,7 +316,6 @@ async function startBot() {
                     return;
                 }
 
-                // Rate Change Command
                 if (text.startsWith('/ratechange')) {
                     try {
                         await sock.sendMessage(sender, { delete: m.key });
@@ -388,6 +386,7 @@ async function startBot() {
 
             if (!chatHistories[sender]) chatHistories[sender] = [];
 
+            let audioPath = null;
             try {
                 let sendAsVoice = false;
 
@@ -396,11 +395,7 @@ async function startBot() {
                 } else {
                     const userWantsVoice = checkForVoiceRequest(text);
                     const userWantsText = checkForTextRequest(text);
-                    if (userWantsVoice && !userWantsText) {
-                        sendAsVoice = true;
-                    } else {
-                        sendAsVoice = false;
-                    }
+                    sendAsVoice = userWantsVoice && !userWantsText;
                 }
 
                 let promptPayload;
@@ -438,16 +433,12 @@ async function startBot() {
                 }
 
                 const modelsToTry = [
-                    "gemini-3.5-flash-lite",
-                    "gemini-3.5-flash",
-                    "gemini-3.1-flash-lite",
                     "gemini-2.5-flash",
-                    "gemini-flash-lite-latest",
-                    "gemini-flash-latest"
+                    "gemini-2.0-flash",
+                    "gemini-1.5-flash"
                 ];
 
                 let responseText = null;
-
                 const currentRatesText = await getDynamicProductsText();
                 const currentSystemPrompt = getSystemPrompt(currentRatesText);
 
@@ -456,9 +447,7 @@ async function startBot() {
                         const model = genAI.getGenerativeModel({
                             model: modelName,
                             systemInstruction: currentSystemPrompt,
-                            generationConfig: {
-                                maxOutputTokens: 500,
-                            }
+                            generationConfig: { maxOutputTokens: 500 }
                         });
 
                         const chat = model.startChat({
@@ -483,7 +472,6 @@ async function startBot() {
                         sendAsVoice = false;
                     }
 
-                    // Save clean user context in history without leaking prompt instructions
                     chatHistories[sender].push({ 
                         role: 'user', 
                         parts: [{ text: isAudio ? '[Voice Note Input]' : text }] 
@@ -495,12 +483,11 @@ async function startBot() {
                     });
 
                     if (sendAsVoice && isUrduScript) {
-                        const audioPath = path.join(__dirname, `reply_${Date.now()}.ogg`);
+                        audioPath = path.join(__dirname, `reply_${Date.now()}.ogg`);
                         try {
                             await generateNaturalAudio(responseText, audioPath);
                             const audioBuffer = fs.readFileSync(audioPath);
 
-                            // FIXED MIME TYPE & PTT ATTRIBUTES FOR WHATSAPP VOICE NOTES
                             await sock.sendMessage(sender, {
                                 audio: audioBuffer,
                                 mimetype: 'audio/ogg; codecs=opus',
@@ -510,10 +497,6 @@ async function startBot() {
                         } catch (audioErr) {
                             console.error("Voice Generation Error, falling back to text:", audioErr);
                             await sock.sendMessage(sender, { text: responseText }, { quoted: m });
-                        } finally {
-                            if (fs.existsSync(audioPath)) {
-                                fs.unlinkSync(audioPath);
-                            }
                         }
                     } else {
                         await sock.sendMessage(sender, { text: responseText }, { quoted: m });
@@ -522,6 +505,10 @@ async function startBot() {
 
             } catch (error) {
                 console.error("Fast Response Error:", error);
+            } finally {
+                if (audioPath && fs.existsSync(audioPath)) {
+                    try { fs.unlinkSync(audioPath); } catch (e) { }
+                }
             }
         });
 
