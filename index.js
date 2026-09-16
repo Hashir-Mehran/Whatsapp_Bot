@@ -477,17 +477,25 @@ async function startBot() {
                 }
 
                 if (responseText) {
-                    chatHistories[sender].push({ role: 'user', parts: [{ text: isAudio ? '[Voice Note Input]' : text }] });
-                    chatHistories[sender].push({ role: 'model', parts: [{ text: responseText }] });
-
                     const isUrduScript = /[\u0600-\u06FF]/.test(responseText);
 
                     if (isAudio && checkForTextRequest(responseText)) {
                         sendAsVoice = false;
                     }
 
+                    // Save clean user context in history without leaking prompt instructions
+                    chatHistories[sender].push({ 
+                        role: 'user', 
+                        parts: [{ text: isAudio ? '[Voice Note Input]' : text }] 
+                    });
+                    
+                    chatHistories[sender].push({ 
+                        role: 'model', 
+                        parts: [{ text: responseText }] 
+                    });
+
                     if (sendAsVoice && isUrduScript) {
-                        const audioPath = path.join(__dirname, `reply_${Date.now()}.mp3`);
+                        const audioPath = path.join(__dirname, `reply_${Date.now()}.ogg`);
                         try {
                             await generateNaturalAudio(responseText, audioPath);
                             const audioBuffer = fs.readFileSync(audioPath);
