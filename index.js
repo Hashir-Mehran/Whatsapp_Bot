@@ -6,7 +6,7 @@ const express = require('express');
 const { MongoClient } = require('mongodb');
 const { EdgeTTS } = require('node-edge-tts');
 const fs = require('fs');
-const path = path = require('path');
+const path = require('path'); // Fixed double assignment syntax error
 
 const dns = require('node:dns');
 dns.setDefaultResultOrder('ipv4first');
@@ -313,7 +313,6 @@ async function startBot() {
 
                 // Rate Change Command
                 if (text.startsWith('/ratechange')) {
-                    // 1. Owner ka command message immediately delete karein
                     try {
                         await sock.sendMessage(sender, { delete: m.key });
                     } catch (err) {
@@ -340,12 +339,10 @@ async function startBot() {
                             { upsert: true }
                         );
 
-                        // 2. Status confirmation message bhejein
                         const sentMsg = await sock.sendMessage(sender, {
                             text: `✅ *Rate Updated Successfully!*\n\n📦 *Product:* ${productName}\n🏷️ *New Rate:* ${priceFormatted}`
                         });
 
-                        // 3. 5 Seconds baad confirmation message ko auto-delete kar dein
                         setTimeout(async () => {
                             try {
                                 await sock.sendMessage(sender, { delete: sentMsg.key });
@@ -430,11 +427,11 @@ async function startBot() {
                     chatHistories[sender].shift();
                 }
 
+                // Updated valid Gemini model fallbacks
                 const modelsToTry = [
                     "gemini-2.5-flash",
-                    "gemini-3.5-flash",
-                    "gemini-3.5-flash-lite",
-                    "gemini-2.5-pro"
+                    "gemini-2.5-pro",
+                    "gemini-1.5-flash"
                 ];
 
                 let responseText = null;
