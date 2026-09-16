@@ -200,7 +200,7 @@ async function generateNaturalAudio(text, outputPath) {
     const tts = new EdgeTTS({
         voice: 'ur-PK-AsadNeural',
         lang: 'ur-PK',
-        outputFormat: 'audio-24khz-48kbitrate-mono-mp3'
+        outputFormat: 'ogg-24khz-16bit-mono-opus'
     });
     await tts.ttsPromise(text, outputPath);
     return outputPath;
