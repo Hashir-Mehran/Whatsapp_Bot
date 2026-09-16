@@ -485,3 +485,14 @@ async function startBot() {
 }
 
 startBot();
+
+
+
+
+
+
+
+
+
+
+
