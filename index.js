@@ -110,10 +110,10 @@ Tum Sargodha, Pakistan me ek premier Electric & Smart Switch Store ke highly pro
 Tumhara maqsad WhatsApp par aane wale customers ke sawalat ka jawab dena, unki zaroorat ke mutabiq products suggest karna, aur orders confirm karwana hai.
 
 ==================================================
-1. LANGUAGE & TONE OF VOICE:
+1. LANGUAGE & TONE RULES:
 ==================================================
-- Hamesha natural, polite aur professional Roman Urdu (ya Urdu Script) me jawab do.
-- Conversational aur welcoming style rakho (e.g., "Assalam-o-Alaikum! Switch Store me khushamdeed!").
+- AGAR RESPONSE TEXT FORM MEIN HO: To HAMESHA Aasaan Roman Urdu (English Alphabets) me jawab do. (e.g., "Assalam-o-Alaikum! Hamari shop par khushamdeed.").
+- AGAR RESPONSE VOICE NOTE FORM MEIN HO: To HAMESHA Pure Urdu Script (اردو رسم الخط) me jawab do taake TTS voice clear aaye. (e.g., "السلام علیکم! ہمارے اسٹور میں خوش آمدید").
 - Boht mukhtasar (Short & Concise) jawab do. 1 se 3 jumlon se ziada lamba jawab mat do.
 
 ==================================================
@@ -142,7 +142,8 @@ Tumhara maqsad WhatsApp par aane wale customers ke sawalat ka jawab dena, unki z
    - Step B: Customer se unki Delivery Details maango (Full Name, Address, Contact).
 5. HUMAN HANDOVER:
    - Agar technical specification ya bulk demand ho jo pata na ho, toh bolo:
-     "Main aap ka paigham store owner ko forward kar raha hoon. Woh jald hi aap se direct rabta kar ke guide kar dein ge."
+     Text Mode: "Main aap ka paigham store owner ko forward kar raha hoon. Woh jald hi aap se direct rabta kar ke guide kar dein ge."
+     Voice Mode: "میں آپ کا پیغام اسٹور کے مالک کو فارورڈ کر رہا ہوں۔ وہ جلد ہی آپ سے براہ راست رابطہ کر کے گائیڈ کر دیں گے۔"
 
 ==================================================
 4. STRICT RESTRICTIONS:
@@ -153,10 +154,10 @@ Tumhara maqsad WhatsApp par aane wale customers ke sawalat ka jawab dena, unki z
 let mongoClient = null;
 let isConnecting = false;
 
-// Natural Pakistani Male Urdu Voice
+// Clear Pakistani Urdu Voice Generator
 async function generateNaturalAudio(text, outputPath) {
     const tts = new EdgeTTS({
-        voice: 'ur-PK-AsadNeural', // Pakistani Male Voice (Ziada clear Urdu bolta hai)
+        voice: 'ur-PK-UzmaNeural', // Clean Natural Pakistani Urdu Voice
         lang: 'ur-PK',
         outputFormat: 'audio-24khz-48kbitrate-mono-mp3'
     });
@@ -164,17 +165,18 @@ async function generateNaturalAudio(text, outputPath) {
     return outputPath;
 }
 
+// User ki demand check karne ke keywords
 function checkForVoiceRequest(text) {
     if (!text) return false;
     const lower = text.toLowerCase();
-    const voiceKeywords = ['voice', 'vois', 'vn', 'voice note', 'voice me', 'voice main', 'bol ke', 'bol kar', 'bolen', 'bolo', 'batao voice', 'audio'];
+    const voiceKeywords = ['voice', 'vois', 'vn', 'voice note', 'voice me', 'voice main', 'bol ke', 'bol kar', 'bolen', 'bolo', 'batao voice', 'audio', 'آواز', 'وائس'];
     return voiceKeywords.some(keyword => lower.includes(keyword));
 }
 
 function checkForTextRequest(text) {
     if (!text) return false;
     const lower = text.toLowerCase();
-    const textKeywords = ['text', 'likh kar', 'likh ke', 'message me', 'msg me', 'text me', 'likho'];
+    const textKeywords = ['text', 'likh kar', 'likh ke', 'message me', 'msg me', 'text me', 'likho', 'likh do', 'تکست', 'لکھ'];
     return textKeywords.some(keyword => lower.includes(keyword));
 }
 
@@ -234,17 +236,15 @@ async function startBot() {
         });
 
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
-            // Sirf live new messages ko trigger hone dein (Loop/Multi-voices Protection)
             if (type !== 'notify') return;
 
             const m = messages[0];
             if (!m || !m.message) return;
 
             const msgId = m.key.id;
-            if (processedMessages.has(msgId)) return; // Pehle se processed message ko dubara na chalayein
+            if (processedMessages.has(msgId)) return;
             processedMessages.add(msgId);
 
-            // Memory Clean-up
             if (processedMessages.size > 1000) {
                 processedMessages.clear();
             }
@@ -276,10 +276,27 @@ async function startBot() {
             if (!chatHistories[sender]) chatHistories[sender] = [];
 
             try {
+                // Determine whether output should be voice or text first
+                const userWantsText = checkForTextRequest(text);
+                const userWantsVoice = checkForVoiceRequest(text);
+
+                let sendAsVoice = false;
+                if (userWantsText) {
+                    sendAsVoice = false;
+                } else if (userWantsVoice) {
+                    sendAsVoice = true;
+                } else {
+                    sendAsVoice = isAudio;
+                }
+
                 let promptPayload;
 
                 if (isAudio) {
                     const audioBuffer = await downloadMediaMessage(m, 'buffer', {});
+                    const formatInstruction = sendAsVoice 
+                        ? "Is audio ko suno. Jawab Sirf 3 se 4 jumlo me exact URDU SCRIPT (اردو) me do." 
+                        : "Is audio ko suno. Jawab Sirf 3 se 4 jumlo me ROMAN URDU (English Alphabets) me do.";
+
                     promptPayload = [
                         {
                             inlineData: {
@@ -287,10 +304,13 @@ async function startBot() {
                                 data: audioBuffer.toString('base64')
                             }
                         },
-                        "Is audio ko sun kar sirf 1 se 2 jumlo mein Urdu (اردو) mein exact aur short jawab do. Extra details bilkul mat do."
+                        formatInstruction
                     ];
                 } else {
-                    promptPayload = text;
+                    const formatInstruction = sendAsVoice 
+                        ? " Jawab Sirf 1 se 2 jumlo me exact URDU SCRIPT (اردو) me do." 
+                        : " Jawab Sirf 1 se 2 jumlo me ROMAN URDU (English Alphabets) me do.";
+                    promptPayload = text + formatInstruction;
                 }
 
                 while (chatHistories[sender].length > 0 && chatHistories[sender][0].role !== 'user') {
@@ -331,21 +351,8 @@ async function startBot() {
                 }
 
                 if (responseText) {
-                    chatHistories[sender].push({ role: 'user', parts: [{ text: isAudio ? '[Voice Note]' : text }] });
+                    chatHistories[sender].push({ role: 'user', parts: [{ text: isAudio ? '[Voice Note Input]' : text }] });
                     chatHistories[sender].push({ role: 'model', parts: [{ text: responseText }] });
-
-                    const requestedVoice = checkForVoiceRequest(text) || checkForVoiceRequest(responseText);
-                    const requestedText = checkForTextRequest(text) || checkForTextRequest(responseText);
-
-                    let sendAsVoice = false;
-
-                    if (requestedVoice) {
-                        sendAsVoice = true;
-                    } else if (requestedText) {
-                        sendAsVoice = false;
-                    } else {
-                        sendAsVoice = isAudio;
-                    }
 
                     if (sendAsVoice) {
                         const audioPath = path.join(__dirname, `reply_${Date.now()}.mp3`);
@@ -355,7 +362,7 @@ async function startBot() {
 
                             await sock.sendMessage(sender, {
                                 audio: audioBuffer,
-                                mimetype: 'audio/mp4',
+                                mimetype: 'audio/ogg; codecs=opus',
                                 ptt: true
                             }, { quoted: m });
 
