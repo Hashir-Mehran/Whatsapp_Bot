@@ -15,10 +15,17 @@ dns.setServers(['8.8.8.8', '8.8.4.4']);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.get('/', (req, res) => res.send('WhatsApp Bot is running live!'));
-app.get('/ping', (req, res) => res.send('Pong! Health check OK.'));
+app.get('/', (req, res) => {
+    res.send('WhatsApp Bot is running live!');
+});
 
-app.listen(PORT, () => console.log(`Server listening on port ${PORT}`));
+app.get('/ping', (req, res) => {
+    res.send('Pong! Health check OK.');
+});
+
+app.listen(PORT, () => {
+    console.log(`Server listening on port ${PORT}`);
+});
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const MONGO_URI = process.env.MONGO_URI;
@@ -56,7 +63,10 @@ async function useMongoDBAuthState(collection) {
     const readData = async (id) => {
         try {
             const document = await collection.findOne({ _id: id });
-            return document ? JSON.parse(document.data, BufferJSON.reviver) : null;
+            if (document) {
+                return JSON.parse(document.data, BufferJSON.reviver);
+            }
+            return null;
         } catch {
             return null;
         }
@@ -129,21 +139,28 @@ You are the official Customer Service & Sales Executive for "Arain Bros, Inc." (
 ==================================================
 - Store Name: Arain Bros, Inc.
 - Tone & Demeanor: Highly professional, warm, polite, respectful, and customer-centric.
-- Language Standard: Always use "Aap", never "Tum".
+- Language Standard: Use respectful Urdu address terms (always use "Aap", never "Tum").
+- Brand Voice: Friendly commercial guide focused on converting leads into sales with proper guidance.
 
 ==================================================
 2. GREETINGS & IDENTITY HANDLING
 ==================================================
-- Greetings: "Wa'alaikumsalam! Arain Bros, Inc. mein khush aamdeed! Main aap ki kis tarah madad kar sakta hoon?"
-- Identity: "Main Arain Bros, Inc. ka official Virtual Assistant hoon."
+- When a user says "Assalam-o-Alaikum" / "A/s" / "Hi" / "Hello":
+  Provide a warm and professional response:
+  "Wa'alaikumsalam! Arain Bros, Inc. mein khush aamdeed! Main aap ki kis tarah madad kar sakta hoon?"
+- When asked "Aap kaun hain?" or identity questions:
+  "Main Arain Bros, Inc. ka official Virtual Assistant hoon. Main aap ko humari store ki items, smart switches, electrical fittings, aur order processing ke baare mein poori maloomat aur rehnumai faraham kar sakta hoon."
 
 ==================================================
-3. CRITICAL OUTPUT FORMATTING RULES
+3. OUTPUT FORMATTING & LANGUAGE RULES
 ==================================================
-- IF INSTRUCTED FOR TEXT MODE:
-  - Respond ONLY in Roman Urdu (English alphabet).
-- IF INSTRUCTED FOR VOICE MODE:
-  - Respond STRICTLY in Pure Urdu Script (اردو رسم الخط). Do NOT use English letters or Roman Urdu in Voice mode, so Text-To-Speech engine can read it properly.
+- TEXT RESPONSE MODE:
+  - Language: Easy, fluent Roman Urdu (English alphabet).
+  - Structure: Clean, professional, well-spaced using bullet points where suitable.
+  - Sentence Integrity: Complete every thought; never leave incomplete lines or broken sentences.
+- VOICE RESPONSE MODE:
+  - Language: Pure Urdu Script (اردو رسم الخط).
+  - Tone: Natural, fully articulated Urdu sentences suitable for text-to-speech engine conversion.
 
 ==================================================
 4. PRODUCT CATALOG & LATEST RATES
@@ -157,6 +174,25 @@ ${productsListText}
 Delivery & Logistics Policy:
 * Sargodha Local Delivery: Same-day or next-day direct home delivery.
 * Nationwide Pakistan Shipping: Express Courier Service (TCS / Leopards) delivered in 2 to 4 working days.
+
+==================================================
+5. SALES WORKFLOW & ORDER MANAGEMENT
+==================================================
+1. CONVERSATION CONTEXT: Review previous dialogue turns before responding to maintain continuity.
+2. PRODUCT NOMENCLATURE: Always use complete, full product names (e.g., "Wi-Fi Touch Smart Switch") instead of technical internal short-codes or nicknames.
+3. RATE LIST REQUESTS: When asked for prices or rate lists, display all product offerings with clean formatting and transparent pricing.
+4. ORDER PLACEMENT FLOW:
+   - Triggers: "Order kar do", "Pack kar do", "Bhej do", "Final karo", "Khareedna hai".
+   - Action Required:
+     a. Confirm the items selected and state the total order value.
+     b. Request Delivery Information:
+        - Full Name
+        - Complete Delivery Address (House No, Street, City)
+        - Active Contact Phone Number
+5. HUMAN ESCALATION PROTOCOL:
+   - For custom bulk orders, complex electrical layout consults, or unresolved technical issues:
+     - Text Mode: "Main aap ka paigham store management ko forward kar raha hoon. Humari team jald hi aap se direct rabta karegi."
+     - Voice Mode: "میں آپ کا پیغام اسٹور کی انتظامیہ کو فارورڈ کر رہا ہوں۔ ہماری ٹیم جلد ہی آپ سے براہ راست رابطہ کرے گی۔"
 `;
 }
 
@@ -164,25 +200,28 @@ async function generateNaturalAudio(text, outputPath) {
     const tts = new EdgeTTS({
         voice: 'ur-PK-AsadNeural',
         lang: 'ur-PK',
-        outputFormat: 'ogg-24khz-16bit-mono-opus',
-        timeout: 30000
+        outputFormat: 'ogg-24khz-16bit-mono-opus'
     });
     await tts.ttsPromise(text, outputPath);
     return outputPath;
 }
 
-function checkForVoiceRequest(text) {
-    if (!text) return false;
-    const lower = text.toLowerCase();
-    const voiceKeywords = ['voice', 'vois', 'vn', 'v voice', 'voice note', 'voice me', 'voice main', 'bol ke', 'bol kar', 'bolen', 'bolo', 'batao voice', 'audio', 'آواز', 'وائس', 'suna', 'sunao', 'bhej voice'];
-    return voiceKeywords.some(keyword => lower.includes(keyword));
-}
-
 function checkForTextRequest(text) {
     if (!text) return false;
     const lower = text.toLowerCase();
-    const textKeywords = ['text', 'likh', 'likho', 'likha', 'likhna', 'likh kar', 'likh ke', 'likh do', 'message me', 'msg me', 'text me', ' rate list', 'ratelist', ' detail', 'details', 'تکست', 'لکھ'];
+    const textKeywords = [
+        'text', 'likh', 'likho', 'likha', 'likhna', 'likh kar', 'likh ke', 'likh do',
+        'message me', 'msg me', 'text me', 'rate list', 'ratelist', 'rates', 'list',
+        'detail', 'details', 'تکست', 'لکھ', 'ریٹ', 'لسٹ'
+    ];
     return textKeywords.some(keyword => lower.includes(keyword));
+}
+
+function checkForVoiceRequest(text) {
+    if (!text) return false;
+    const lower = text.toLowerCase();
+    const voiceKeywords = ['voice', 'vois', 'vn', 'voice note', 'voice me', 'voice main', 'bol ke', 'bol kar', 'bolen', 'bolo', 'batao voice', 'audio', 'آواز', 'وائس'];
+    return voiceKeywords.some(keyword => lower.includes(keyword));
 }
 
 async function startBot() {
@@ -217,7 +256,7 @@ async function startBot() {
 
             if (qr) {
                 console.log("\n==================================================");
-                console.log("    APNE WHATSAPP SE QR SCAN KAREIN   ");
+                console.log("    APNE WHATSAPP SE NECHE DIYA GAYA QR SCAN KAREIN   ");
                 console.log("==================================================\n");
                 qrcode.generate(qr, { small: true });
             }
@@ -226,8 +265,10 @@ async function startBot() {
                 isConnecting = false;
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+                console.log(`Connection drop. StatusCode: ${statusCode}. Reconnecting: ${shouldReconnect}`);
 
                 if (statusCode === DisconnectReason.loggedOut) {
+                    console.log("Session Logged Out! Database cleared.");
                     await collection.deleteMany({});
                     setTimeout(() => startBot(), 3000);
                 } else if (shouldReconnect) {
@@ -235,7 +276,7 @@ async function startBot() {
                 }
             } else if (connection === 'open') {
                 isConnecting = false;
-                console.log('\nSUCCESS: WhatsApp Bot Connected!\n');
+                console.log('\nSUCCESS: WhatsApp Bot Successfully Connected & Alive!\n');
             }
         });
 
@@ -249,17 +290,20 @@ async function startBot() {
             if (processedMessages.has(msgId)) return;
             processedMessages.add(msgId);
 
-            if (processedMessages.size > 1000) processedMessages.clear();
+            if (processedMessages.size > 1000) {
+                processedMessages.clear();
+            }
 
             const sender = m.key.remoteJid;
             const isFromMe = m.key.fromMe;
             const isAudio = !!m.message.audioMessage;
             const text = (m.message.conversation || m.message.extendedTextMessage?.text || "").trim();
 
-            // OWNER COMMANDS
+            // OWNER COMMANDS HANDLING
             if (isFromMe && text) {
                 const cleanText = text.toLowerCase();
 
+                // Bot Control Commands
                 if (cleanText === 'off') {
                     pausedChats.add(sender);
                     try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) { }
@@ -272,16 +316,25 @@ async function startBot() {
                     return;
                 }
 
+                // Rate Change Command
                 if (text.startsWith('/ratechange')) {
-                    try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) { }
+                    try {
+                        await sock.sendMessage(sender, { delete: m.key });
+                    } catch (err) {
+                        console.error("Could not delete command message:", err);
+                    }
+
                     const parts = text.split(' ');
                     if (parts.length >= 3) {
                         const nickname = parts[1].toLowerCase();
                         const newPrice = parts.slice(2).join(' ');
+
                         let productName = defaultProducts[nickname]?.name || nickname;
 
                         const existingDoc = await ratesCollection.findOne({ nickname });
-                        if (existingDoc && existingDoc.name) productName = existingDoc.name;
+                        if (existingDoc && existingDoc.name) {
+                            productName = existingDoc.name;
+                        }
 
                         const priceFormatted = newPrice.toLowerCase().includes('rs') ? newPrice : `Rs. ${newPrice}`;
 
@@ -292,11 +345,28 @@ async function startBot() {
                         );
 
                         const sentMsg = await sock.sendMessage(sender, {
-                            text: `✅ *Rate Updated!*\n📦 *Product:* ${productName}\n🏷️ *New Rate:* ${priceFormatted}`
+                            text: `✅ *Rate Updated Successfully!*\n\n📦 *Product:* ${productName}\n🏷️ *New Rate:* ${priceFormatted}`
                         });
 
                         setTimeout(async () => {
-                            try { await sock.sendMessage(sender, { delete: sentMsg.key }); } catch (e) { }
+                            try {
+                                await sock.sendMessage(sender, { delete: sentMsg.key });
+                            } catch (err) {
+                                console.error("Could not auto-delete rate status message:", err);
+                            }
+                        }, 5000);
+
+                    } else {
+                        const sentMsg = await sock.sendMessage(sender, {
+                            text: `❌ *Invalid Format!*\nUse: \`/ratechange wifi-switch 2000\`\nAvailable Nicknames:\n- \`wifi-switch\`\n- \`normal-switch\`\n- \`board\`\n- \`breaker\``
+                        });
+
+                        setTimeout(async () => {
+                            try {
+                                await sock.sendMessage(sender, { delete: sentMsg.key });
+                            } catch (err) {
+                                console.error("Could not auto-delete error status message:", err);
+                            }
                         }, 5000);
                     }
                     return;
@@ -305,9 +375,10 @@ async function startBot() {
                 if (cleanText === '/ratelist') {
                     try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) { }
                     const currentRatesText = await getDynamicProductsText();
-                    await sock.sendMessage(sender, { text: `📋 *Current Product Rates:*\n\n${currentRatesText}` });
+                    await sock.sendMessage(sender, { text: `📋 *Current Product Rates List:*\n\n${currentRatesText}` });
                     return;
                 }
+
                 return;
             }
 
@@ -316,23 +387,31 @@ async function startBot() {
 
             if (!chatHistories[sender]) chatHistories[sender] = [];
 
-            let audioPath = null;
             try {
-                // DECIDE IF RESPONSE SHOULD BE VOICE NOTE
-                const wantsVoice = isAudio || checkForVoiceRequest(text);
-                const wantsText = checkForTextRequest(text);
-                
-                // If user asked for voice, override and send voice unless explicitly asked for text list
-                const sendAsVoice = wantsVoice && !wantsText;
+                let sendAsVoice = false;
+
+                if (isAudio) {
+                    sendAsVoice = true;
+                } else {
+                    const userWantsVoice = checkForVoiceRequest(text);
+                    const userWantsText = checkForTextRequest(text);
+                    if (userWantsVoice && !userWantsText) {
+                        sendAsVoice = true;
+                    } else {
+                        sendAsVoice = false;
+                    }
+                }
 
                 let promptPayload;
 
                 if (isAudio) {
                     const audioBuffer = await downloadMediaMessage(m, 'buffer', {});
-                    const formatInstruction = sendAsVoice
-                        ? " [CRITICAL INSTRUCTION]: Customer ne Voice Note bheja hai. Jawab STRICTLY Pure Urdu Script (اردو) me do taakay voice generate ho sake."
-                        : " [INSTRUCTION]: Customer ne text mangha hai. Jawab Roman Urdu (English Alphabets) me do.";
-
+                    const formatInstruction = `
+[INSTRUCTION]: 
+1. Direct customer voice note listen karein.
+2. AGAR customer ne voice me "likh kar", "text me", "rate list", "list", "detail" maangi ho, toh answer Roman Urdu text mein dein.
+3. AGAR normal dialogue ho, toh answer Pure Urdu Script (اردو) mein complete sentences mein dein.
+`;
                     promptPayload = [
                         {
                             inlineData: {
@@ -344,9 +423,8 @@ async function startBot() {
                     ];
                 } else {
                     const formatInstruction = sendAsVoice
-                        ? " [CRITICAL INSTRUCTION]: Customer ko Voice Note sunana hai. Isliye jawab STRICTLY Pure Urdu Script (اردو) mein 2-3 aasan sentences mein do. English alphabet ya Roman Urdu bilkul mat likhna."
-                        : " [INSTRUCTION]: Jawab Roman Urdu (English Alphabets) me do. Clear aur polite sentences use karo.";
-                    
+                        ? " [INSTRUCTION]: Jawab Sirf Pure Urdu Script (اردو) me complete 2-3 sentences me do."
+                        : " [INSTRUCTION]: Jawab Roman Urdu (English Alphabets) me do. Clear aur polite sentence structure maintain rakho.";
                     promptPayload = text + formatInstruction;
                 }
 
@@ -358,8 +436,17 @@ async function startBot() {
                     chatHistories[sender].shift();
                 }
 
-                const modelsToTry = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+                const modelsToTry = [
+                    "gemini-3.5-flash-lite",
+                    "gemini-3.5-flash",
+                    "gemini-3.1-flash-lite",
+                    "gemini-2.5-flash",
+                    "gemini-flash-lite-latest",
+                    "gemini-flash-latest"
+                ];
+
                 let responseText = null;
+
                 const currentRatesText = await getDynamicProductsText();
                 const currentSystemPrompt = getSystemPrompt(currentRatesText);
 
@@ -368,47 +455,56 @@ async function startBot() {
                         const model = genAI.getGenerativeModel({
                             model: modelName,
                             systemInstruction: currentSystemPrompt,
-                            generationConfig: { maxOutputTokens: 500 }
+                            generationConfig: {
+                                maxOutputTokens: 500,
+                            }
                         });
 
-                        const chat = model.startChat({ history: chatHistories[sender] });
+                        const chat = model.startChat({
+                            history: chatHistories[sender]
+                        });
+
                         const result = await chat.sendMessage(promptPayload);
                         responseText = result.response.text().trim();
                         break;
                     } catch (apiErr) {
-                        console.warn(`Fallback triggered from ${modelName}`);
+                        console.warn(`Model ${modelName} fallback triggered: ${apiErr.message}`);
+                        if (modelName === modelsToTry[modelsToTry.length - 1]) {
+                            throw apiErr;
+                        }
                     }
                 }
 
                 if (responseText) {
-                    chatHistories[sender].push({
-                        role: 'user',
-                        parts: [{ text: isAudio ? '[Voice Note Input]' : text }]
-                    });
+                    chatHistories[sender].push({ role: 'user', parts: [{ text: isAudio ? '[Voice Note Input]' : text }] });
+                    chatHistories[sender].push({ role: 'model', parts: [{ text: responseText }] });
 
-                    chatHistories[sender].push({
-                        role: 'model',
-                        parts: [{ text: responseText }]
-                    });
+                    const isUrduScript = /[\u0600-\u06FF]/.test(responseText);
 
-                    if (sendAsVoice) {
-                        // Clean markdown or special symbols from Urdu text for TTS engine
-                        const cleanUrduText = responseText.replace(/[*_~`]/g, '');
-                        audioPath = path.join(__dirname, `reply_${Date.now()}.ogg`);
-                        
+                    if (isAudio && checkForTextRequest(responseText)) {
+                        sendAsVoice = false;
+                    }
+
+                    if (sendAsVoice && isUrduScript) {
+                        const audioPath = path.join(__dirname, `reply_${Date.now()}.mp3`);
                         try {
-                            await generateNaturalAudio(cleanUrduText, audioPath);
+                            await generateNaturalAudio(responseText, audioPath);
                             const audioBuffer = fs.readFileSync(audioPath);
 
+                            // FIXED MIME TYPE & PTT ATTRIBUTES FOR WHATSAPP VOICE NOTES
                             await sock.sendMessage(sender, {
                                 audio: audioBuffer,
                                 mimetype: 'audio/ogg; codecs=opus',
-                                ptt: true // Sends as WhatsApp Voice Note
+                                ptt: true
                             }, { quoted: m });
 
                         } catch (audioErr) {
-                            console.error("Audio generation error, fallback to text:", audioErr);
+                            console.error("Voice Generation Error, falling back to text:", audioErr);
                             await sock.sendMessage(sender, { text: responseText }, { quoted: m });
+                        } finally {
+                            if (fs.existsSync(audioPath)) {
+                                fs.unlinkSync(audioPath);
+                            }
                         }
                     } else {
                         await sock.sendMessage(sender, { text: responseText }, { quoted: m });
@@ -416,11 +512,7 @@ async function startBot() {
                 }
 
             } catch (error) {
-                console.error("Error processing message:", error);
-            } finally {
-                if (audioPath && fs.existsSync(audioPath)) {
-                    try { fs.unlinkSync(audioPath); } catch (e) { }
-                }
+                console.error("Fast Response Error:", error);
             }
         });
 
