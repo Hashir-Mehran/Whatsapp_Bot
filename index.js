@@ -4,6 +4,9 @@ const qrcode = require('qrcode-terminal');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const express = require('express');
 const { MongoClient } = require('mongodb');
+const { EdgeTTS } = require('node-edge-tts');
+const fs = require('fs');
+const path = require('path');
 
 const dns = require('node:dns');
 dns.setDefaultResultOrder('ipv4first');
@@ -151,134 +154,238 @@ Tumhara maqsad WhatsApp par aane wale customers ke sawalat ka jawab dena, unki z
 - Hamesha respectful raho, chahe customer rude bhi ho.
 `;
 
-async function connectToWhatsApp() {
-    const client = new MongoClient(MONGO_URI);
-    await client.connect();
-    const db = client.db('whatsapp_bot');
-    const collection = db.collection('auth_session');
+let mongoClient = null;
+let isConnecting = false;
 
-    const { state, saveCreds } = await useMongoDBAuthState(collection);
-
-    const sock = makeWASocket({
-        auth: state,
-        printQRInTerminal: false,
-        keepAliveIntervalMs: 25000,
-        connectTimeoutMs: 60000,
-        defaultQueryTimeoutMs: 60000,
-        syncFullHistory: false
+// Natural Human Voice Generator Function
+async function generateNaturalAudio(text, outputPath) {
+    const tts = new EdgeTTS({
+        voice: 'ur-PK-UzmaNeural', // Urdu Natural Female Voice (Male ke liye 'ur-PK-AsadNeural' use kar sakte hain)
+        lang: 'ur-PK',
+        outputFormat: 'audio-24khz-48kbitrate-mono-mp3'
     });
-
-    sock.ev.on('creds.update', saveCreds);
-
-    sock.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect, qr } = update;
-
-        if (qr) {
-            console.log("\n==================================================");
-            console.log("   APNE WHATSAPP SE NECHE DIYA GAYA QR SCAN KAREIN   ");
-            console.log("==================================================\n");
-            qrcode.generate(qr, { small: true });
-        }
-
-        if (connection === 'close') {
-            const statusCode = lastDisconnect?.error?.output?.statusCode;
-            const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-            console.log(`Connection drop. StatusCode: ${statusCode}. Reconnecting: ${shouldReconnect}`);
-
-            if (statusCode === DisconnectReason.loggedOut) {
-                console.log("Session Logged Out! Database cleared.");
-                await collection.deleteMany({});
-                connectToWhatsApp();
-            } else if (shouldReconnect) {
-                setTimeout(() => {
-                    connectToWhatsApp();
-                }, 3000);
-            }
-        } else if (connection === 'open') {
-            console.log('\nSUCCESS: WhatsApp Bot Successfully Connected & Alive!\n');
-        }
-    });
-
-    sock.ev.on('messages.upsert', async ({ messages }) => {
-        const m = messages[0];
-        if (!m.message) return;
-
-        const sender = m.key.remoteJid;
-        const isFromMe = m.key.fromMe;
-        const isAudio = !!m.message.audioMessage;
-        const text = (m.message.conversation || m.message.extendedTextMessage?.text || "").trim();
-
-        if (isFromMe && text) {
-            const cleanText = text.toLowerCase();
-            if (cleanText === 'off') {
-                pausedChats.add(sender);
-                await sock.sendMessage(sender, { delete: m.key });
-                return;
-            }
-            if (cleanText === 'start') {
-                pausedChats.delete(sender);
-                chatHistories[sender] = [];
-                await sock.sendMessage(sender, { delete: m.key });
-                return;
-            }
-            return;
-        }
-
-        if (pausedChats.has(sender)) return;
-        if (!isAudio && !text) return;
-
-        if (!chatHistories[sender]) chatHistories[sender] = [];
-
-        try {
-            const model = genAI.getGenerativeModel({ 
-                model: "gemini-2.5-flash",
-                systemInstruction: systemPrompt,
-                generationConfig: {
-                    maxOutputTokens: 150,
-                }
-            });
-
-            let promptPayload;
-
-            if (isAudio) {
-                const audioBuffer = await downloadMediaMessage(m, 'buffer', {});
-                promptPayload = [
-                    {
-                        inlineData: {
-                            mimeType: m.message.audioMessage.mimetype || 'audio/ogg; codecs=opus',
-                            data: audioBuffer.toString('base64')
-                        }
-                    },
-                    "Is voice ko sun kar sirf 1 se 2 lines mein short aur exact Roman Urdu text jawab do."
-                ];
-            } else {
-                promptPayload = text;
-            }
-
-            // Ensure history always starts with 'user'
-            while (chatHistories[sender].length > 0 && chatHistories[sender][0].role !== 'user') {
-                chatHistories[sender].shift();
-            }
-
-            // --- MAIN FIX HERE: Use startChat with history ---
-            const chat = model.startChat({
-                history: chatHistories[sender]
-            });
-
-            const result = await chat.sendMessage(promptPayload);
-            const responseText = result.response.text().trim();
-
-            // Store current turn into history
-            chatHistories[sender].push({ role: 'user', parts: [{ text: isAudio ? '[Voice Note]' : text }] });
-            chatHistories[sender].push({ role: 'model', parts: [{ text: responseText }] });
-
-            // Send reply to WhatsApp
-            await sock.sendMessage(sender, { text: responseText }, { quoted: m });
-
-        } catch (error) {
-            console.error("Fast Response Error:", error);
-        }
-    });
+    await tts.ttsPromise(text, outputPath);
+    return outputPath;
 }
 
-connectToWhatsApp();
+// Intent Detection Helpers
+function checkForVoiceRequest(text) {
+    if (!text) return false;
+    const lower = text.toLowerCase();
+    const voiceKeywords = ['voice', 'vois', 'vn', 'voice note', 'voice me', 'voice main', 'bol ke', 'bol kar', 'bolen', 'bolo', 'batao voice', 'audio'];
+    return voiceKeywords.some(keyword => lower.includes(keyword));
+}
+
+function checkForTextRequest(text) {
+    if (!text) return false;
+    const lower = text.toLowerCase();
+    const textKeywords = ['text', 'likh kar', 'likh ke', 'message me', 'msg me', 'text me', 'likho'];
+    return textKeywords.some(keyword => lower.includes(keyword));
+}
+
+async function startBot() {
+    if (isConnecting) return;
+    isConnecting = true;
+
+    try {
+        if (!mongoClient) {
+            mongoClient = new MongoClient(MONGO_URI);
+            await mongoClient.connect();
+        }
+
+        const db = mongoClient.db('whatsapp_bot');
+        const collection = db.collection('auth_session');
+
+        const { state, saveCreds } = await useMongoDBAuthState(collection);
+
+        const sock = makeWASocket({
+            auth: state,
+            printQRInTerminal: false,
+            keepAliveIntervalMs: 25000,
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 60000,
+            syncFullHistory: false
+        });
+
+        sock.ev.on('creds.update', saveCreds);
+
+        sock.ev.on('connection.update', async (update) => {
+            const { connection, lastDisconnect, qr } = update;
+
+            if (qr) {
+                console.log("\n==================================================");
+                console.log("   APNE WHATSAPP SE NECHE DIYA GAYA QR SCAN KAREIN   ");
+                console.log("==================================================\n");
+                qrcode.generate(qr, { small: true });
+            }
+
+            if (connection === 'close') {
+                isConnecting = false;
+                const statusCode = lastDisconnect?.error?.output?.statusCode;
+                const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+                console.log(`Connection drop. StatusCode: ${statusCode}. Reconnecting: ${shouldReconnect}`);
+
+                if (statusCode === DisconnectReason.loggedOut) {
+                    console.log("Session Logged Out! Database cleared.");
+                    await collection.deleteMany({});
+                    setTimeout(() => startBot(), 3000);
+                } else if (shouldReconnect) {
+                    setTimeout(() => startBot(), 3000);
+                }
+            } else if (connection === 'open') {
+                isConnecting = false;
+                console.log('\nSUCCESS: WhatsApp Bot Successfully Connected & Alive!\n');
+            }
+        });
+
+        sock.ev.on('messages.upsert', async ({ messages }) => {
+            const m = messages[0];
+            if (!m.message) return;
+
+            const sender = m.key.remoteJid;
+            const isFromMe = m.key.fromMe;
+            const isAudio = !!m.message.audioMessage;
+            const text = (m.message.conversation || m.message.extendedTextMessage?.text || "").trim();
+
+            if (isFromMe && text) {
+                const cleanText = text.toLowerCase();
+                if (cleanText === 'off') {
+                    pausedChats.add(sender);
+                    await sock.sendMessage(sender, { delete: m.key });
+                    return;
+                }
+                if (cleanText === 'start') {
+                    pausedChats.delete(sender);
+                    chatHistories[sender] = [];
+                    await sock.sendMessage(sender, { delete: m.key });
+                    return;
+                }
+                return;
+            }
+
+            if (pausedChats.has(sender)) return;
+            if (!isAudio && !text) return;
+
+            if (!chatHistories[sender]) chatHistories[sender] = [];
+
+            try {
+                let promptPayload;
+
+                if (isAudio) {
+                    const audioBuffer = await downloadMediaMessage(m, 'buffer', {});
+                    promptPayload = [
+                        {
+                            inlineData: {
+                                mimeType: m.message.audioMessage.mimetype || 'audio/ogg; codecs=opus',
+                                data: audioBuffer.toString('base64')
+                            }
+                        },
+                        "Is voice ko sun kar sirf 4 se 5 lines mein professional aur exact Roman Urdu text jawab do."
+                    ];
+                } else {
+                    promptPayload = text;
+                }
+
+                while (chatHistories[sender].length > 0 && chatHistories[sender][0].role !== 'user') {
+                    chatHistories[sender].shift();
+                }
+
+                // Updated Multi-Tier Fallback Array
+                const modelsToTry = [
+                    "gemini-3.5-flash",
+                    "gemini-3.1-flash-lite",
+                    "gemini-2.5-flash-lite",
+                    "gemini-2.5-flash",
+                    "gemini-3.6-flash",
+                    "gemini-3.7-flash",
+                    "gemini-3.8-flash",
+                    "gemini-3.1-pro-preview",
+                    "gemini-2.5-pro",
+                    "gemini-flash-latest",
+                    "gemini-pro-latest",
+                    "gemini-flash-lite-latest",
+                    "gemma-4-31b-it"
+                ];
+
+                let responseText = null;
+
+                for (const modelName of modelsToTry) {
+                    try {
+                        const model = genAI.getGenerativeModel({ 
+                            model: modelName,
+                            systemInstruction: systemPrompt,
+                            generationConfig: {
+                                maxOutputTokens: 500,
+                            }
+                        });
+
+                        const chat = model.startChat({
+                            history: chatHistories[sender]
+                        });
+
+                        const result = await chat.sendMessage(promptPayload);
+                        responseText = result.response.text().trim();
+                        break; // Step successful, exit retry loop
+                    } catch (apiErr) {
+                        console.warn(`Model ${modelName} failed/quota exceeded. Trying next... Error: ${apiErr.message}`);
+                        if (modelName === modelsToTry[modelsToTry.length - 1]) {
+                            throw apiErr; 
+                        }
+                    }
+                }
+
+                if (responseText) {
+                    chatHistories[sender].push({ role: 'user', parts: [{ text: isAudio ? '[Voice Note]' : text }] });
+                    chatHistories[sender].push({ role: 'model', parts: [{ text: responseText }] });
+
+                    // Logic Routing for Output
+                    const requestedVoice = checkForVoiceRequest(text) || checkForVoiceRequest(responseText);
+                    const requestedText = checkForTextRequest(text) || checkForTextRequest(responseText);
+
+                    let sendAsVoice = false;
+
+                    if (requestedVoice) {
+                        sendAsVoice = true;  // Explicit client request overrides default
+                    } else if (requestedText) {
+                        sendAsVoice = false; // Explicit client request overrides default
+                    } else {
+                        sendAsVoice = isAudio; // Default rule: Voice -> Voice, Text -> Text
+                    }
+
+                    if (sendAsVoice) {
+                        const audioPath = path.join(__dirname, `reply_${Date.now()}.mp3`);
+                        try {
+                            await generateNaturalAudio(responseText, audioPath);
+                            const audioBuffer = fs.readFileSync(audioPath);
+
+                            await sock.sendMessage(sender, {
+                                audio: audioBuffer,
+                                mimetype: 'audio/mp4',
+                                ptt: true
+                            }, { quoted: m });
+
+                            if (fs.existsSync(audioPath)) {
+                                fs.unlinkSync(audioPath);
+                            }
+                        } catch (audioErr) {
+                            console.error("Voice Generation Error, sending text fallback:", audioErr);
+                            await sock.sendMessage(sender, { text: responseText }, { quoted: m });
+                        }
+                    } else {
+                        await sock.sendMessage(sender, { text: responseText }, { quoted: m });
+                    }
+                }
+
+            } catch (error) {
+                console.error("Fast Response Error:", error);
+            }
+        });
+
+    } catch (err) {
+        isConnecting = false;
+        console.error("Startup Error:", err);
+        setTimeout(() => startBot(), 5000);
+    }
+}
+
+startBot();
