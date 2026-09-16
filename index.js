@@ -317,13 +317,13 @@ async function startBot() {
                 // Bot Control Commands
                 if (cleanText === 'off') {
                     pausedChats.add(sender);
-                    try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) {}
+                    try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) { }
                     return;
                 }
                 if (cleanText === 'start') {
                     pausedChats.delete(sender);
                     chatHistories[sender] = [];
-                    try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) {}
+                    try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) { }
                     return;
                 }
 
@@ -384,7 +384,7 @@ async function startBot() {
                 }
 
                 if (cleanText === '/ratelist') {
-                    try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) {}
+                    try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) { }
                     const currentRatesText = await getDynamicProductsText();
                     await sock.sendMessage(sender, { text: `📋 *Current Product Rates List:*\n\n${currentRatesText}` });
                     return;
@@ -445,10 +445,12 @@ async function startBot() {
 
                 // Active production Gemini Models Cascade
                 const modelsToTry = [
-                    "gemini-2.5-flash-lite",
-                    "gemini-3.1-flash-lite",
+                    "gemini-3.5-flash-lite",
                     "gemini-3.5-flash",
-                    "gemini-2.5-flash"
+                    "gemini-3.1-flash-lite",
+                    "gemini-2.5-flash",
+                    "gemini-flash-lite-latest",
+                    "gemini-flash-latest"
                 ];
 
                 let responseText = null;
