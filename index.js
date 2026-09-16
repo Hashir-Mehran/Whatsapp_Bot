@@ -51,17 +51,6 @@ let mongoClient = null;
 let isConnecting = false;
 let ratesCollection = null;
 
-async function checkModels() {
-    try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`);
-        const data = await response.json();
-        console.log("Available Models:", data.models?.map(m => m.name));
-    } catch (err) {
-        console.error("Error fetching models:", err);
-    }
-}
-checkModels();
-
 async function useMongoDBAuthState(collection) {
     const writeData = (data, id) => {
         return collection.replaceOne(
@@ -439,7 +428,6 @@ async function startBot() {
                     promptPayload = text + formatInstruction;
                 }
 
-                // Keep memory buffer lightweight and drop ancient history turns
                 if (chatHistories[sender].length > 10) {
                     chatHistories[sender] = chatHistories[sender].slice(-10);
                 }
@@ -448,8 +436,7 @@ async function startBot() {
                     chatHistories[sender].shift();
                 }
 
-                // Active production Gemini Models Cascade (updated for reliability)
-                  const modelsToTry = [
+                const modelsToTry = [
                     "gemini-3.5-flash-lite",
                     "gemini-3.5-flash",
                     "gemini-3.1-flash-lite",
@@ -504,9 +491,10 @@ async function startBot() {
                             await generateNaturalAudio(responseText, audioPath);
                             const audioBuffer = fs.readFileSync(audioPath);
 
+                            // FIXED MIME TYPE & PTT ATTRIBUTES FOR WHATSAPP VOICE NOTES
                             await sock.sendMessage(sender, {
                                 audio: audioBuffer,
-                                mimetype: 'audio/mp4',
+                                mimetype: 'audio/ogg; codecs=opus',
                                 ptt: true
                             }, { quoted: m });
 
