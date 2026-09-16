@@ -38,6 +38,7 @@ if (!GEMINI_API_KEY || !MONGO_URI) {
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const pausedChats = new Set();
 const chatHistories = {};
+const processedMessages = new Set(); // Duplicate messages block karne ke liye
 
 async function checkModels() {
     try {
@@ -111,9 +112,9 @@ Tumhara maqsad WhatsApp par aane wale customers ke sawalat ka jawab dena, unki z
 ==================================================
 1. LANGUAGE & TONE OF VOICE:
 ==================================================
-- Hamesha natural, polite aur professional Roman Urdu (ya Urdu) me jawab do.
+- Hamesha natural, polite aur professional Roman Urdu (ya Urdu Script) me jawab do.
 - Conversational aur welcoming style rakho (e.g., "Assalam-o-Alaikum! Switch Store me khushamdeed!").
-- Short, crisp aur easy-to-read messages bhejo. Zyada lambay paragraphs se perhez karo.
+- Boht mukhtasar (Short & Concise) jawab do. 1 se 3 jumlon se ziada lamba jawab mat do.
 
 ==================================================
 2. STORE & BUSINESS DETAILS:
@@ -132,35 +133,30 @@ Tumhara maqsad WhatsApp par aane wale customers ke sawalat ka jawab dena, unki z
 ==================================================
 3. CONVERSATION & SALES RULES:
 ==================================================
-1. CHAT HISTORY CHECK: Message ka jawab dene se pehle purani chat history parho. Agar customer ya Store Owner ne pehle hi koi price, discount ya deal tay kar li hai, toh wahi se baat aage barhao—dobara pehle wale sawal mat poocho.
+1. CHAT HISTORY CHECK: Message ka jawab dene se pehle purani chat history parho.
 2. NEED ASSESSMENT: Agar customer pooche ke konsa switch behtar hai, toh unse unki requirement (Normal Wiring ya Smart Home Setup) poocho.
-3. PRICE FLEXIBILITY: Agar customer kisi price par bargain kare, toh polite raho. Agar Owner ne chat me koi special rate likha ho toh wahi final samjho.
+3. PRICE FLEXIBILITY: Price par bargain karein toh polite raho.
 4. ORDER TAKING TRIGGER:
    - Jab customer bole: "Order kar do", "Parcel bhej do", "Pack kar do", "Send kar do", ya "Final karo":
    - Step A: Pehle order kiye gaye items aur total price ki confirmation do.
-   - Step B: Customer se unki Delivery Details maango:
-     * Full Name (Naam)
-     * Complete Delivery Address
-     * Contact Phone Number
-5. HUMAN HANDOVER / UNKNOWN QUERIES:
-   - Agar customer koi aisi technical specification, bulk discount, ya custom board design maange jo details me nahi hai, toh exact yeh reply do:
+   - Step B: Customer se unki Delivery Details maango (Full Name, Address, Contact).
+5. HUMAN HANDOVER:
+   - Agar technical specification ya bulk demand ho jo pata na ho, toh bolo:
      "Main aap ka paigham store owner ko forward kar raha hoon. Woh jald hi aap se direct rabta kar ke guide kar dein ge."
 
 ==================================================
 4. STRICT RESTRICTIONS:
 ==================================================
-- Kisi doosri city ke local shop ya competitors ki baat mat karo.
-- Ghalat ya fake prices mat batao.
-- Hamesha respectful raho, chahe customer rude bhi ho.
+- Extra baatein mat karo, faaltu lamba text mat likho.
 `;
 
 let mongoClient = null;
 let isConnecting = false;
 
-// Natural Human Voice Generator Function
+// Natural Pakistani Male Urdu Voice
 async function generateNaturalAudio(text, outputPath) {
     const tts = new EdgeTTS({
-        voice: 'ur-PK-UzmaNeural', // Urdu Natural Female Voice (Male ke liye 'ur-PK-AsadNeural' use kar sakte hain)
+        voice: 'ur-PK-AsadNeural', // Pakistani Male Voice (Ziada clear Urdu bolta hai)
         lang: 'ur-PK',
         outputFormat: 'audio-24khz-48kbitrate-mono-mp3'
     });
@@ -168,7 +164,6 @@ async function generateNaturalAudio(text, outputPath) {
     return outputPath;
 }
 
-// Intent Detection Helpers
 function checkForVoiceRequest(text) {
     if (!text) return false;
     const lower = text.toLowerCase();
@@ -238,9 +233,21 @@ async function startBot() {
             }
         });
 
-        sock.ev.on('messages.upsert', async ({ messages }) => {
+        sock.ev.on('messages.upsert', async ({ messages, type }) => {
+            // Sirf live new messages ko trigger hone dein (Loop/Multi-voices Protection)
+            if (type !== 'notify') return;
+
             const m = messages[0];
-            if (!m.message) return;
+            if (!m || !m.message) return;
+
+            const msgId = m.key.id;
+            if (processedMessages.has(msgId)) return; // Pehle se processed message ko dubara na chalayein
+            processedMessages.add(msgId);
+
+            // Memory Clean-up
+            if (processedMessages.size > 1000) {
+                processedMessages.clear();
+            }
 
             const sender = m.key.remoteJid;
             const isFromMe = m.key.fromMe;
@@ -280,7 +287,7 @@ async function startBot() {
                                 data: audioBuffer.toString('base64')
                             }
                         },
-                        "Is voice ko sun kar sirf 4 se 5 lines mein professional aur exact Roman Urdu text jawab do."
+                        "Is audio ko sun kar sirf 1 se 2 jumlo mein Urdu (اردو) mein exact aur short jawab do. Extra details bilkul mat do."
                     ];
                 } else {
                     promptPayload = text;
@@ -290,21 +297,10 @@ async function startBot() {
                     chatHistories[sender].shift();
                 }
 
-                // Updated Multi-Tier Fallback Array
                 const modelsToTry = [
-                    "gemini-3.5-flash",
-                    "gemini-3.1-flash-lite",
-                    "gemini-2.5-flash-lite",
                     "gemini-2.5-flash",
-                    "gemini-3.6-flash",
-                    "gemini-3.7-flash",
-                    "gemini-3.8-flash",
-                    "gemini-3.1-pro-preview",
-                    "gemini-2.5-pro",
-                    "gemini-flash-latest",
-                    "gemini-pro-latest",
-                    "gemini-flash-lite-latest",
-                    "gemma-4-31b-it"
+                    "gemini-2.5-flash-lite",
+                    "gemini-1.5-flash"
                 ];
 
                 let responseText = null;
@@ -315,7 +311,7 @@ async function startBot() {
                             model: modelName,
                             systemInstruction: systemPrompt,
                             generationConfig: {
-                                maxOutputTokens: 500,
+                                maxOutputTokens: 250,
                             }
                         });
 
@@ -325,7 +321,7 @@ async function startBot() {
 
                         const result = await chat.sendMessage(promptPayload);
                         responseText = result.response.text().trim();
-                        break; // Step successful, exit retry loop
+                        break;
                     } catch (apiErr) {
                         console.warn(`Model ${modelName} failed/quota exceeded. Trying next... Error: ${apiErr.message}`);
                         if (modelName === modelsToTry[modelsToTry.length - 1]) {
@@ -338,18 +334,17 @@ async function startBot() {
                     chatHistories[sender].push({ role: 'user', parts: [{ text: isAudio ? '[Voice Note]' : text }] });
                     chatHistories[sender].push({ role: 'model', parts: [{ text: responseText }] });
 
-                    // Logic Routing for Output
                     const requestedVoice = checkForVoiceRequest(text) || checkForVoiceRequest(responseText);
                     const requestedText = checkForTextRequest(text) || checkForTextRequest(responseText);
 
                     let sendAsVoice = false;
 
                     if (requestedVoice) {
-                        sendAsVoice = true;  // Explicit client request overrides default
+                        sendAsVoice = true;
                     } else if (requestedText) {
-                        sendAsVoice = false; // Explicit client request overrides default
+                        sendAsVoice = false;
                     } else {
-                        sendAsVoice = isAudio; // Default rule: Voice -> Voice, Text -> Text
+                        sendAsVoice = isAudio;
                     }
 
                     if (sendAsVoice) {
@@ -364,12 +359,13 @@ async function startBot() {
                                 ptt: true
                             }, { quoted: m });
 
-                            if (fs.existsSync(audioPath)) {
-                                fs.unlinkSync(audioPath);
-                            }
                         } catch (audioErr) {
                             console.error("Voice Generation Error, sending text fallback:", audioErr);
                             await sock.sendMessage(sender, { text: responseText }, { quoted: m });
+                        } finally {
+                            if (fs.existsSync(audioPath)) {
+                                fs.unlinkSync(audioPath);
+                            }
                         }
                     } else {
                         await sock.sendMessage(sender, { text: responseText }, { quoted: m });
