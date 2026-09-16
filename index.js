@@ -329,12 +329,12 @@ async function startBot() {
                             { upsert: true }
                         );
 
-                        await sock.sendMessage(sender, { 
-                            text: `✅ *Rate Updated Successfully!*\n\n📦 *Product:* ${productName}\n🏷️ *New Rate:* ${priceFormatted}` 
+                        await sock.sendMessage(sender, {
+                            text: `✅ *Rate Updated Successfully!*\n\n📦 *Product:* ${productName}\n🏷️ *New Rate:* ${priceFormatted}`
                         });
                     } else {
-                        await sock.sendMessage(sender, { 
-                            text: `❌ *Invalid Format!*\nUse: \`/ratechange wifi-switch 2000\`\nAvailable Nicknames:\n- \`wifi-switch\`\n- \`normal-switch\`\n- \`board\`\n- \`breaker\`` 
+                        await sock.sendMessage(sender, {
+                            text: `❌ *Invalid Format!*\nUse: \`/ratechange wifi-switch 2000\`\nAvailable Nicknames:\n- \`wifi-switch\`\n- \`normal-switch\`\n- \`board\`\n- \`breaker\``
                         });
                     }
                     return;
@@ -390,8 +390,8 @@ async function startBot() {
                         formatInstruction
                     ];
                 } else {
-                    const formatInstruction = sendAsVoice 
-                        ? " [INSTRUCTION]: Jawab Sirf Urdu Script (اردو) me mukammal aur ba-maani 2-3 jumlo me do." 
+                    const formatInstruction = sendAsVoice
+                        ? " [INSTRUCTION]: Jawab Sirf Urdu Script (اردو) me mukammal aur ba-maani 2-3 jumlo me do."
                         : " [INSTRUCTION]: Jawab Roman Urdu (English Alphabets) me do. Clear aur mukammal baatein batao.";
                     promptPayload = text + formatInstruction;
                 }
@@ -402,8 +402,9 @@ async function startBot() {
 
                 const modelsToTry = [
                     "gemini-2.5-flash",
-                    "gemini-2.5-flash-lite",
-                    "gemini-1.5-flash"
+                    "gemini-3.5-flash",
+                    "gemini-3.5-flash-lite",
+                    "gemini-2.5-pro"
                 ];
 
                 let responseText = null;
@@ -414,7 +415,7 @@ async function startBot() {
 
                 for (const modelName of modelsToTry) {
                     try {
-                        const model = genAI.getGenerativeModel({ 
+                        const model = genAI.getGenerativeModel({
                             model: modelName,
                             systemInstruction: currentSystemPrompt,
                             generationConfig: {
@@ -432,7 +433,7 @@ async function startBot() {
                     } catch (apiErr) {
                         console.warn(`Model ${modelName} failed/quota exceeded. Trying next... Error: ${apiErr.message}`);
                         if (modelName === modelsToTry[modelsToTry.length - 1]) {
-                            throw apiErr; 
+                            throw apiErr;
                         }
                     }
                 }
