@@ -439,12 +439,17 @@ async function startBot() {
                     promptPayload = text + formatInstruction;
                 }
 
+                // Keep memory buffer lightweight and drop ancient history turns
+                if (chatHistories[sender].length > 10) {
+                    chatHistories[sender] = chatHistories[sender].slice(-10);
+                }
+
                 while (chatHistories[sender].length > 0 && chatHistories[sender][0].role !== 'user') {
                     chatHistories[sender].shift();
                 }
 
-                // Active production Gemini Models Cascade
-                const modelsToTry = [
+                // Active production Gemini Models Cascade (updated for reliability)
+                  const modelsToTry = [
                     "gemini-3.5-flash-lite",
                     "gemini-3.5-flash",
                     "gemini-3.1-flash-lite",
