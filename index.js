@@ -40,7 +40,6 @@ const pausedChats = new Set();
 const chatHistories = {};
 const processedMessages = new Set();
 
-// Default Products & Nicknames Mapping
 const defaultProducts = {
     'normal-switch': { name: 'Standard / Normal Electric Switch & Socket', price: 'Rs. 150 - Rs. 350 per piece' },
     'wifi-switch': { name: 'Wi-Fi Touch Smart Switch (App & Voice Control)', price: 'Rs. 1,800 - Rs. 3,500 per piece' },
@@ -117,12 +116,10 @@ async function useMongoDBAuthState(collection) {
     };
 }
 
-// Dynamic Products List fetch karne ke liye function
 async function getDynamicProductsText() {
     try {
         let products = await ratesCollection.find({}).toArray();
         if (!products || products.length === 0) {
-            // Seed default values in DB
             for (const key of Object.keys(defaultProducts)) {
                 await ratesCollection.updateOne(
                     { nickname: key },
@@ -185,7 +182,6 @@ Business Hours: 10:00 AM se 9:00 PM.
 `;
 }
 
-// Male Urdu Voice Generator
 async function generateNaturalAudio(text, outputPath) {
     const tts = new EdgeTTS({
         voice: 'ur-PK-AsadNeural',
@@ -289,25 +285,32 @@ async function startBot() {
             const isAudio = !!m.message.audioMessage;
             const text = (m.message.conversation || m.message.extendedTextMessage?.text || "").trim();
 
-            // OWNER COMMANDS HANDLING (Only works from logged-in WhatsApp)
+            // OWNER COMMANDS HANDLING
             if (isFromMe && text) {
                 const cleanText = text.toLowerCase();
 
                 // Bot Control Commands
                 if (cleanText === 'off') {
                     pausedChats.add(sender);
-                    await sock.sendMessage(sender, { delete: m.key });
+                    try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) {}
                     return;
                 }
                 if (cleanText === 'start') {
                     pausedChats.delete(sender);
                     chatHistories[sender] = [];
-                    await sock.sendMessage(sender, { delete: m.key });
+                    try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) {}
                     return;
                 }
 
-                // Dynamic Rate Update Command: /ratechange [nickname] [new price]
+                // Rate Change Command
                 if (text.startsWith('/ratechange')) {
+                    // Command Message Ko Immediately Delete Karein
+                    try {
+                        await sock.sendMessage(sender, { delete: m.key });
+                    } catch (err) {
+                        console.error("Could not delete command message:", err);
+                    }
+
                     const parts = text.split(' ');
                     if (parts.length >= 3) {
                         const nickname = parts[1].toLowerCase();
@@ -315,7 +318,6 @@ async function startBot() {
 
                         let productName = defaultProducts[nickname]?.name || nickname;
 
-                        // Check if exists in DB to retain existing full name
                         const existingDoc = await ratesCollection.findOne({ nickname });
                         if (existingDoc && existingDoc.name) {
                             productName = existingDoc.name;
@@ -340,8 +342,8 @@ async function startBot() {
                     return;
                 }
 
-                // Show Current Rates List to Owner
                 if (cleanText === '/ratelist') {
+                    try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) {}
                     const currentRatesText = await getDynamicProductsText();
                     await sock.sendMessage(sender, { text: `📋 *Current Product Rates List:*\n\n${currentRatesText}` });
                     return;
@@ -409,7 +411,6 @@ async function startBot() {
 
                 let responseText = null;
 
-                // Fetch latest dynamic rates from MongoDB for prompt
                 const currentRatesText = await getDynamicProductsText();
                 const currentSystemPrompt = getSystemPrompt(currentRatesText);
 
@@ -454,9 +455,10 @@ async function startBot() {
                             await generateNaturalAudio(responseText, audioPath);
                             const audioBuffer = fs.readFileSync(audioPath);
 
+                            // Send Voice Note (Corrected for both sides)
                             await sock.sendMessage(sender, {
                                 audio: audioBuffer,
-                                mimetype: 'audio/ogg; codecs=opus',
+                                mimetype: 'audio/mp4',
                                 ptt: true
                             }, { quoted: m });
 
@@ -486,6 +488,3 @@ async function startBot() {
 }
 
 startBot();
-
-
-
