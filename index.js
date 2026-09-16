@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { default: makeWASocket, DisconnectReason, initAuthCreds, BufferJSON } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, DisconnectReason, initAuthCreds, BufferJSON, downloadMediaMessage } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const express = require('express');
@@ -36,14 +36,17 @@ const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const pausedChats = new Set();
 const chatHistories = {};
 
-
-// Available models print karne ke liye
 async function checkModels() {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`);
-    const data = await response.json();
-    console.log("Available Models:", data.models?.map(m => m.name));
+    try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`);
+        const data = await response.json();
+        console.log("Available Models:", data.models?.map(m => m.name));
+    } catch (err) {
+        console.error("Error fetching models:", err);
+    }
 }
 checkModels();
+
 async function useMongoDBAuthState(collection) {
     const writeData = (data, id) => {
         return collection.replaceOne(
@@ -202,15 +205,10 @@ async function connectToWhatsApp() {
 
         const sender = m.key.remoteJid;
         const isFromMe = m.key.fromMe;
+        const isAudio = !!m.message.audioMessage;
         const text = (m.message.conversation || m.message.extendedTextMessage?.text || "").trim();
 
-        if (!text) return;
-
-        if (!chatHistories[sender]) {
-            chatHistories[sender] = [];
-        }
-
-        if (isFromMe) {
+        if (isFromMe && text) {
             const cleanText = text.toLowerCase();
             if (cleanText === 'off') {
                 pausedChats.add(sender);
@@ -219,45 +217,61 @@ async function connectToWhatsApp() {
             }
             if (cleanText === 'start') {
                 pausedChats.delete(sender);
-                chatHistories[sender] = []; // Fresh start ke liye history reset
+                chatHistories[sender] = [];
                 await sock.sendMessage(sender, { delete: m.key });
-                console.log(`Chat history reset for: ${sender}`);
                 return;
-            }
-            chatHistories[sender].push({ role: 'model', parts: [{ text: text }] });
-
-            if (chatHistories[sender].length > 10) {
-                chatHistories[sender] = chatHistories[sender].slice(-10);
             }
             return;
         }
 
         if (pausedChats.has(sender)) return;
+        if (!isAudio && !text) return;
+
+        if (!chatHistories[sender]) chatHistories[sender] = [];
 
         try {
-            // Updated Official Model Name (gemini-1.5-flash)
+            // Fast generation config
             const model = genAI.getGenerativeModel({ 
                 model: "gemini-3.6-flash",
-                systemInstruction: systemPrompt 
+                systemInstruction: systemPrompt,
+                generationConfig: {
+                    maxOutputTokens: 100, // Response length choti rakhne se reply fooran banega
+                }
             });
 
-            const historyForGemini = chatHistories[sender].slice(-10);
-            const chat = model.startChat({ history: historyForGemini });
+            let promptPayload;
 
-            const result = await chat.sendMessage(text);
-            const responseText = result.response.text();
+            if (isAudio) {
+                // Buffer stream optimization
+                const audioBuffer = await downloadMediaMessage(m, 'buffer', {});
 
-            // History Update after response
-            chatHistories[sender].push({ role: 'user', parts: [{ text: text }] });
-            chatHistories[sender].push({ role: 'model', parts: [{ text: responseText }] });
-
-            if (chatHistories[sender].length > 10) {
-                chatHistories[sender] = chatHistories[sender].slice(-10);
+                promptPayload = [
+                    {
+                        inlineData: {
+                            mimeType: m.message.audioMessage.mimetype || 'audio/ogg; codecs=opus',
+                            data: audioBuffer.toString('base64')
+                        }
+                    },
+                    "Is voice ko sun kar sirf 1 se 2 lines mein short aur exact Roman Urdu text jawab do."
+                ];
+            } else {
+                promptPayload = text;
             }
 
-            await sock.sendMessage(sender, { text: responseText });
+            // --- PEHLI ENTRY HAMESHA USER ROLE RAKHNE KA FIX ---
+            while (chatHistories[sender].length > 0 && chatHistories[sender][0].role !== 'user') {
+                chatHistories[sender].shift();
+            }
+
+            // Direct stream generation for minimum latency
+            const result = await model.generateContent(promptPayload);
+            const responseText = result.response.text();
+
+            // Immediate send
+            await sock.sendMessage(sender, { text: responseText }, { quoted: m });
+
         } catch (error) {
-            console.error("Gemini API Error:", error);
+            console.error("Fast Response Error:", error);
         }
     });
 }
