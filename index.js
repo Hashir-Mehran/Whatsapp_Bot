@@ -230,21 +230,18 @@ async function connectToWhatsApp() {
         if (!chatHistories[sender]) chatHistories[sender] = [];
 
         try {
-            // Fast generation config
             const model = genAI.getGenerativeModel({ 
                 model: "gemini-3.6-flash",
                 systemInstruction: systemPrompt,
                 generationConfig: {
-                    maxOutputTokens: 100, // Response length choti rakhne se reply fooran banega
+                    maxOutputTokens: 150,
                 }
             });
 
             let promptPayload;
 
             if (isAudio) {
-                // Buffer stream optimization
                 const audioBuffer = await downloadMediaMessage(m, 'buffer', {});
-
                 promptPayload = [
                     {
                         inlineData: {
@@ -258,16 +255,24 @@ async function connectToWhatsApp() {
                 promptPayload = text;
             }
 
-            // --- PEHLI ENTRY HAMESHA USER ROLE RAKHNE KA FIX ---
+            // Ensure history always starts with 'user'
             while (chatHistories[sender].length > 0 && chatHistories[sender][0].role !== 'user') {
                 chatHistories[sender].shift();
             }
 
-            // Direct stream generation for minimum latency
-            const result = await model.generateContent(promptPayload);
-            const responseText = result.response.text();
+            // --- MAIN FIX HERE: Use startChat with history ---
+            const chat = model.startChat({
+                history: chatHistories[sender]
+            });
 
-            // Immediate send
+            const result = await chat.sendMessage(promptPayload);
+            const responseText = result.response.text().trim();
+
+            // Store current turn into history
+            chatHistories[sender].push({ role: 'user', parts: [{ text: isAudio ? '[Voice Note]' : text }] });
+            chatHistories[sender].push({ role: 'model', parts: [{ text: responseText }] });
+
+            // Send reply to WhatsApp
             await sock.sendMessage(sender, { text: responseText }, { quoted: m });
 
         } catch (error) {
