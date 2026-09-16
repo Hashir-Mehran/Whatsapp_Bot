@@ -6,7 +6,7 @@ const express = require('express');
 const { MongoClient } = require('mongodb');
 const { EdgeTTS } = require('node-edge-tts');
 const fs = require('fs');
-const path = require('path');
+const path = path = require('path');
 
 const dns = require('node:dns');
 dns.setDefaultResultOrder('ipv4first');
@@ -143,18 +143,27 @@ async function getDynamicProductsText() {
 
 function getSystemPrompt(productsListText) {
     return `
-Tum Sargodha, Pakistan me ek premier Electric & Smart Switch Store ke highly professional, friendly aur natural Sales Assistant ho. 
-Tumhara tone bilkul insano jaisa, relaxed aur madadgar hona chahiye. Kabhi adhoori baat ya robot jaisi ajeeb phrasing mat use karo.
+Tum Sargodha, Pakistan me ek premier Electric & Smart Switch Store ke highly professional, polite aur respectful Sales Assistant ho. 
+Tumhara tone hamesha adab, izzat aur sharafat wala hona chahiye. Customer ko hamesha "Aap" keh kar mukhatib karo.
 
 ==================================================
-1. LANGUAGE & RESPONSE INSTRUCTIONS:
+1. GREETING & RESPECTFUL TONE RULES (CRITICAL):
 ==================================================
-- Jab tumhein bola jaye ke TEXT mode me jawab do: HAMESHA Aasaan Roman Urdu (English Alphabets) me jawab do. Clear, polite aur naturally likho.
+- "Asalam-o-Alaikum" ya "Aslamalikum" ka jawab HAMESHA respectful aur natural Roman Urdu me do: 
+  "Wa'alaikumsalam! Main aap ki kis tarah madad kar sakta hoon?" ya "Wa'alaikumsalam! Khush Aamdeed! Main aap ki kya madad kar sakta hoon?"
+- Kabhi ajeeb, informal, literal translation ya weird sentences MAT use karna (e.g., "kaisa lagta hai aap ko aaj?" bilkul nahi kehna).
+- Agar customer pooche "aap kon ha" ya identity maange, toh izzat se jawab do:
+  "Main Electric & Smart Switch Store ka Sales Assistant hoon. Aap ko humari shop se electric switches, smart switches ya kisi bhi product ke baare mein maloomat chahiye ho, toh main aap ki poori rehnukai karunga."
+
+==================================================
+2. LANGUAGE & RESPONSE INSTRUCTIONS:
+==================================================
+- Jab tumhein bola jaye ke TEXT mode me jawab do: HAMESHA Aasaan Roman Urdu (English Alphabets) me jawab do. Clear, polite aur natural likho.
 - Jab tumhein bola jaye ke VOICE mode me jawab do: HAMESHA Pure Urdu Script (اردو رسم الخط) me mukammal aur ba-maani sentence likho taake audio natural sunayi de.
 - Baat hamesha poori karo, kabhi adhoora sentence mat chhorna.
 
 ==================================================
-2. STORE & LATEST PRODUCT RATES:
+3. STORE & LATEST PRODUCT RATES:
 ==================================================
 Location: Sargodha, Punjab, Pakistan.
 Current Product Rates:
@@ -166,7 +175,7 @@ Delivery Details:
 Business Hours: 10:00 AM se 9:00 PM.
 
 ==================================================
-3. CONVERSATION & SALES RULES:
+4. CONVERSATION & SALES RULES:
 ==================================================
 1. CHAT HISTORY CHECK: Message ka jawab dene se pehle purani chat history parho.
 2. PRODUCT NAMES: Customers ko HAMESHA full aur proper product name batao, nickname kabhi mat use karo.
@@ -177,7 +186,7 @@ Business Hours: 10:00 AM se 9:00 PM.
    - Step B: Customer se unki Delivery Details maango (Full Name, Address, Contact).
 5. HUMAN HANDOVER:
    - Agar technical specification ya bulk demand ho jo pata na ho, toh bolo:
-     Text Mode: "Main aap ka paigham store owner ko forward kar raha hoon. Woh jald hi aap se direct rabta kar ke guide kar dein ge."
+     Text Mode: "Main aap ka pagham store owner ko forward kar raha hoon. Woh jald hi aap se direct rabta kar ke guide kar dein ge."
      Voice Mode: "میں آپ کا پیغام اسٹور کے مالک کو فارورڈ کر رہا ہوں۔ وہ جلد ہی آپ سے براہ راست رابطہ کر کے گائیڈ کر دیں گے۔"
 `;
 }
@@ -304,7 +313,7 @@ async function startBot() {
 
                 // Rate Change Command
                 if (text.startsWith('/ratechange')) {
-                    // Command Message Ko Immediately Delete Karein
+                    // 1. Owner ka command message immediately delete karein
                     try {
                         await sock.sendMessage(sender, { delete: m.key });
                     } catch (err) {
@@ -331,13 +340,32 @@ async function startBot() {
                             { upsert: true }
                         );
 
-                        await sock.sendMessage(sender, {
+                        // 2. Status confirmation message bhejein
+                        const sentMsg = await sock.sendMessage(sender, {
                             text: `✅ *Rate Updated Successfully!*\n\n📦 *Product:* ${productName}\n🏷️ *New Rate:* ${priceFormatted}`
                         });
+
+                        // 3. 5 Seconds baad confirmation message ko auto-delete kar dein
+                        setTimeout(async () => {
+                            try {
+                                await sock.sendMessage(sender, { delete: sentMsg.key });
+                            } catch (err) {
+                                console.error("Could not auto-delete rate status message:", err);
+                            }
+                        }, 5000);
+
                     } else {
-                        await sock.sendMessage(sender, {
+                        const sentMsg = await sock.sendMessage(sender, {
                             text: `❌ *Invalid Format!*\nUse: \`/ratechange wifi-switch 2000\`\nAvailable Nicknames:\n- \`wifi-switch\`\n- \`normal-switch\`\n- \`board\`\n- \`breaker\``
                         });
+
+                        setTimeout(async () => {
+                            try {
+                                await sock.sendMessage(sender, { delete: sentMsg.key });
+                            } catch (err) {
+                                console.error("Could not auto-delete error status message:", err);
+                            }
+                        }, 5000);
                     }
                     return;
                 }
@@ -455,7 +483,6 @@ async function startBot() {
                             await generateNaturalAudio(responseText, audioPath);
                             const audioBuffer = fs.readFileSync(audioPath);
 
-                            // Send Voice Note (Corrected for both sides)
                             await sock.sendMessage(sender, {
                                 audio: audioBuffer,
                                 mimetype: 'audio/mp4',
