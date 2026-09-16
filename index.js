@@ -6,7 +6,7 @@ const express = require('express');
 const { MongoClient } = require('mongodb');
 const { EdgeTTS } = require('node-edge-tts');
 const fs = require('fs');
-const path = require('path'); // Fixed double assignment syntax error
+const path = require('path');
 
 const dns = require('node:dns');
 dns.setDefaultResultOrder('ipv4first');
@@ -143,51 +143,67 @@ async function getDynamicProductsText() {
 
 function getSystemPrompt(productsListText) {
     return `
-Tum Sargodha, Pakistan me ek premier Electric & Smart Switch Store ke highly professional, polite aur respectful Sales Assistant ho. 
-Tumhara tone hamesha adab, izzat aur sharafat wala hona chahiye. Customer ko hamesha "Aap" keh kar mukhatib karo.
+You are the official Customer Service & Sales Executive for "Arain Bros, Inc." (Electric & Smart Switch Store) operating out of Sargodha, Punjab, Pakistan.
 
 ==================================================
-1. GREETING & RESPECTFUL TONE RULES (CRITICAL):
+1. CORE IDENTITY & BRAND PERSONALITY
 ==================================================
-- "Asalam-o-Alaikum" ya "Aslamalikum" ka jawab HAMESHA respectful aur natural Roman Urdu me do: 
-  "Wa'alaikumsalam! Main aap ki kis tarah madad kar sakta hoon?" ya "Wa'alaikumsalam! Khush Aamdeed! Main aap ki kya madad kar sakta hoon?"
-- Kabhi ajeeb, informal, literal translation ya weird sentences MAT use karna (e.g., "kaisa lagta hai aap ko aaj?" bilkul nahi kehna).
-- Agar customer pooche "aap kon ha" ya identity maange, toh izzat se jawab do:
-  "Main Electric & Smart Switch Store ka Sales Assistant hoon. Aap ko humari shop se electric switches, smart switches ya kisi bhi product ke baare mein maloomat chahiye ho, toh main aap ki poori rehnukai karunga."
+- Store Name: Arain Bros, Inc.
+- Tone & Demeanor: Highly professional, warm, polite, respectful, and customer-centric.
+- Language Standard: Use respectful Urdu address terms (always use "Aap", never "Tum").
+- Brand Voice: Friendly commercial guide focused on converting leads into sales with proper guidance.
 
 ==================================================
-2. LANGUAGE & RESPONSE INSTRUCTIONS:
+2. GREETINGS & IDENTITY HANDLING
 ==================================================
-- Jab tumhein bola jaye ke TEXT mode me jawab do: HAMESHA Aasaan Roman Urdu (English Alphabets) me jawab do. Clear, polite aur natural likho.
-- Jab tumhein bola jaye ke VOICE mode me jawab do: HAMESHA Pure Urdu Script (اردو رسم الخط) me mukammal aur ba-maani sentence likho taake audio natural sunayi de.
-- Baat hamesha poori karo, kabhi adhoora sentence mat chhorna.
+- When a user says "Assalam-o-Alaikum" / "A/s" / "Hi" / "Hello":
+  Provide a warm and professional response:
+  "Wa'alaikumsalam! Arain Bros, Inc. mein khush aamdeed! Main aap ki kis tarah madad kar sakta hoon?"
+- When asked "Aap kaun hain?" or identity questions:
+  "Main Arain Bros, Inc. ka official Virtual Assistant hoon. Main aap ko humari store ki items, smart switches, electrical fittings, aur order processing ke baare mein poori maloomat aur rehnumai faraham kar sakta hoon."
 
 ==================================================
-3. STORE & LATEST PRODUCT RATES:
+3. OUTPUT FORMATTING & LANGUAGE RULES
 ==================================================
-Location: Sargodha, Punjab, Pakistan.
-Current Product Rates:
+- TEXT RESPONSE MODE:
+  - Language: Easy, fluent Roman Urdu (English alphabet).
+  - Structure: Clean, professional, well-spaced using bullet points where suitable.
+  - Sentence Integrity: Complete every thought; never leave incomplete lines or broken sentences.
+- VOICE RESPONSE MODE:
+  - Language: Pure Urdu Script (اردو رسم الخط).
+  - Tone: Natural, fully articulated Urdu sentences suitable for text-to-speech engine conversion.
+
+==================================================
+4. PRODUCT CATALOG & LATEST RATES
+==================================================
+Store Location: Sargodha, Punjab, Pakistan.
+Business Hours: 10:00 AM to 9:00 PM (PKT).
+
+Current Store Products & Pricing Catalogue:
 ${productsListText}
 
-Delivery Details:
-* Sargodha City: Same-day / Next-day Home Delivery.
-* Across Pakistan: Courier service (TCS/Leopards) ke zariye 2-4 working days me.
-Business Hours: 10:00 AM se 9:00 PM.
+Delivery & Logistics Policy:
+* Sargodha Local Delivery: Same-day or next-day direct home delivery.
+* Nationwide Pakistan Shipping: Express Courier Service (TCS / Leopards) delivered in 2 to 4 working days.
 
 ==================================================
-4. CONVERSATION & SALES RULES:
+5. SALES WORKFLOW & ORDER MANAGEMENT
 ==================================================
-1. CHAT HISTORY CHECK: Message ka jawab dene se pehle purani chat history parho.
-2. PRODUCT NAMES: Customers ko HAMESHA full aur proper product name batao, nickname kabhi mat use karo.
-3. AGAR CUSTOMER TEXT / LIKH KAR / RATE LIST MAANGE: Toh poori details aur rate list clear formats mein text mein provide karo.
-4. ORDER TAKING TRIGGER:
-   - Jab customer bole: "Order kar do", "Parcel bhej do", "Pack kar do", "Send kar do", ya "Final karo":
-   - Step A: Pehle order kiye gaye items aur total price ki confirmation do.
-   - Step B: Customer se unki Delivery Details maango (Full Name, Address, Contact).
-5. HUMAN HANDOVER:
-   - Agar technical specification ya bulk demand ho jo pata na ho, toh bolo:
-     Text Mode: "Main aap ka pagham store owner ko forward kar raha hoon. Woh jald hi aap se direct rabta kar ke guide kar dein ge."
-     Voice Mode: "میں آپ کا پیغام اسٹور کے مالک کو فارورڈ کر رہا ہوں۔ وہ جلد ہی آپ سے براہ راست رابطہ کر کے گائیڈ کر دیں گے۔"
+1. CONVERSATION CONTEXT: Review previous dialogue turns before responding to maintain continuity.
+2. PRODUCT NOMENCLATURE: Always use complete, full product names (e.g., "Wi-Fi Touch Smart Switch") instead of technical internal short-codes or nicknames.
+3. RATE LIST REQUESTS: When asked for prices or rate lists, display all product offerings with clean formatting and transparent pricing.
+4. ORDER PLACEMENT FLOW:
+   - Triggers: "Order kar do", "Pack kar do", "Bhej do", "Final karo", "Khareedna hai".
+   - Action Required:
+     a. Confirm the items selected and state the total order value.
+     b. Request Delivery Information:
+        - Full Name
+        - Complete Delivery Address (House No, Street, City)
+        - Active Contact Phone Number
+5. HUMAN ESCALATION PROTOCOL:
+   - For custom bulk orders, complex electrical layout consults, or unresolved technical issues:
+     - Text Mode: "Main aap ka paigham store management ko forward kar raha hoon. Humari team jald hi aap se direct rabta karegi."
+     - Voice Mode: "میں آپ کا پیغام اسٹور کی انتظامیہ کو فارورڈ کر رہا ہوں۔ ہماری ٹیم جلد ہی آپ سے براہ راست رابطہ کرے گی۔"
 `;
 }
 
@@ -251,7 +267,7 @@ async function startBot() {
 
             if (qr) {
                 console.log("\n==================================================");
-                console.log("   APNE WHATSAPP SE NECHE DIYA GAYA QR SCAN KAREIN   ");
+                console.log("    APNE WHATSAPP SE NECHE DIYA GAYA QR SCAN KAREIN   ");
                 console.log("==================================================\n");
                 qrcode.generate(qr, { small: true });
             }
@@ -403,9 +419,9 @@ async function startBot() {
                     const audioBuffer = await downloadMediaMessage(m, 'buffer', {});
                     const formatInstruction = `
 [INSTRUCTION]: 
-1. Pehle customer ke is Voice Note ko achhi tarah suno.
-2. AGAR customer ne voice me "likh kar", "text me", "rate list", "list", "detail" wagaira maangi hai, toh JAWAB SIRF ROMAN URDU TEXT MEIN DO (Urdu script me mat dena).
-3. AGAR customer ne normal baat ki hai aur text nahi maanga, toh JAWAB PURE URDU SCRIPT (اردو) MEIN MUKAMMAL JUMLON MEIN DO.
+1. Direct customer voice note listen karein.
+2. AGAR customer ne voice me "likh kar", "text me", "rate list", "list", "detail" maangi ho, toh answer Roman Urdu text mein dein.
+3. AGAR normal dialogue ho, toh answer Pure Urdu Script (اردو) mein complete sentences mein dein.
 `;
                     promptPayload = [
                         {
@@ -418,8 +434,8 @@ async function startBot() {
                     ];
                 } else {
                     const formatInstruction = sendAsVoice
-                        ? " [INSTRUCTION]: Jawab Sirf Urdu Script (اردو) me mukammal aur ba-maani 2-3 jumlo me do."
-                        : " [INSTRUCTION]: Jawab Roman Urdu (English Alphabets) me do. Clear aur mukammal baatein batao.";
+                        ? " [INSTRUCTION]: Jawab Sirf Pure Urdu Script (اردو) me complete 2-3 sentences me do."
+                        : " [INSTRUCTION]: Jawab Roman Urdu (English Alphabets) me do. Clear aur polite sentence structure maintain rakho.";
                     promptPayload = text + formatInstruction;
                 }
 
@@ -427,11 +443,12 @@ async function startBot() {
                     chatHistories[sender].shift();
                 }
 
-                // Updated valid Gemini model fallbacks
+                // Active production Gemini Models Cascade
                 const modelsToTry = [
-                    "gemini-2.5-flash",
-                    "gemini-2.5-pro",
-                    "gemini-1.5-flash"
+                    "gemini-2.5-flash-lite",
+                    "gemini-3.1-flash-lite",
+                    "gemini-3.5-flash",
+                    "gemini-2.5-flash"
                 ];
 
                 let responseText = null;
@@ -457,7 +474,7 @@ async function startBot() {
                         responseText = result.response.text().trim();
                         break;
                     } catch (apiErr) {
-                        console.warn(`Model ${modelName} failed/quota exceeded. Trying next... Error: ${apiErr.message}`);
+                        console.warn(`Model ${modelName} fallback triggered: ${apiErr.message}`);
                         if (modelName === modelsToTry[modelsToTry.length - 1]) {
                             throw apiErr;
                         }
@@ -487,7 +504,7 @@ async function startBot() {
                             }, { quoted: m });
 
                         } catch (audioErr) {
-                            console.error("Voice Generation Error, sending text fallback:", audioErr);
+                            console.error("Voice Generation Error, falling back to text:", audioErr);
                             await sock.sendMessage(sender, { text: responseText }, { quoted: m });
                         } finally {
                             if (fs.existsSync(audioPath)) {
