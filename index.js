@@ -38,7 +38,19 @@ if (!GEMINI_API_KEY || !MONGO_URI) {
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const pausedChats = new Set();
 const chatHistories = {};
-const processedMessages = new Set(); // Duplicate messages block karne ke liye
+const processedMessages = new Set();
+
+// Default Products & Nicknames Mapping
+const defaultProducts = {
+    'normal-switch': { name: 'Standard / Normal Electric Switch & Socket', price: 'Rs. 150 - Rs. 350 per piece' },
+    'wifi-switch': { name: 'Wi-Fi Touch Smart Switch (App & Voice Control)', price: 'Rs. 1,800 - Rs. 3,500 per piece' },
+    'board': { name: 'Complete Switchboard & Set', price: 'Rs. 800 - Rs. 2,500' },
+    'breaker': { name: 'Circuit Breakers & Smart Distribution Boxes', price: 'Rs. 500 - Rs. 1,800' }
+};
+
+let mongoClient = null;
+let isConnecting = false;
+let ratesCollection = null;
 
 async function checkModels() {
     try {
@@ -105,37 +117,63 @@ async function useMongoDBAuthState(collection) {
     };
 }
 
-const systemPrompt = `
-Tum Sargodha, Pakistan me ek premier Electric & Smart Switch Store ke highly professional, friendly aur expert Sales Assistant ho. 
-Tumhara maqsad WhatsApp par aane wale customers ke sawalat ka jawab dena, unki zaroorat ke mutabiq products suggest karna, aur orders confirm karwana hai.
+// Dynamic Products List fetch karne ke liye function
+async function getDynamicProductsText() {
+    try {
+        let products = await ratesCollection.find({}).toArray();
+        if (!products || products.length === 0) {
+            // Seed default values in DB
+            for (const key of Object.keys(defaultProducts)) {
+                await ratesCollection.updateOne(
+                    { nickname: key },
+                    { $set: { nickname: key, name: defaultProducts[key].name, price: defaultProducts[key].price } },
+                    { upsert: true }
+                );
+            }
+            products = await ratesCollection.find({}).toArray();
+        }
+
+        let productStr = "";
+        products.forEach(p => {
+            productStr += `- ${p.name}: ${p.price}\n`;
+        });
+        return productStr;
+    } catch (e) {
+        console.error("Error getting dynamic rates:", e);
+        return `- Standard Electric Switches: Rs. 150 - Rs. 350 per piece\n- Wi-Fi Touch Smart Switches: Rs. 1,800 - Rs. 3,500 per piece`;
+    }
+}
+
+function getSystemPrompt(productsListText) {
+    return `
+Tum Sargodha, Pakistan me ek premier Electric & Smart Switch Store ke highly professional, friendly aur natural Sales Assistant ho. 
+Tumhara tone bilkul insano jaisa, relaxed aur madadgar hona chahiye. Kabhi adhoori baat ya robot jaisi ajeeb phrasing mat use karo.
 
 ==================================================
-1. LANGUAGE & TONE RULES:
+1. LANGUAGE & RESPONSE INSTRUCTIONS:
 ==================================================
-- AGAR RESPONSE TEXT FORM MEIN HO: To HAMESHA Aasaan Roman Urdu (English Alphabets) me jawab do. (e.g., "Assalam-o-Alaikum! Hamari shop par khushamdeed.").
-- AGAR RESPONSE VOICE NOTE FORM MEIN HO: To HAMESHA Pure Urdu Script (اردو رسم الخط) me jawab do taake TTS voice clear aaye. (e.g., "السلام علیکم! ہمارے اسٹور میں خوش آمدید").
-- Boht mukhtasar (Short & Concise) jawab do. 1 se 3 jumlon se ziada lamba jawab mat do.
+- Jab tumhein bola jaye ke TEXT mode me jawab do: HAMESHA Aasaan Roman Urdu (English Alphabets) me jawab do. Clear, polite aur naturally likho.
+- Jab tumhein bola jaye ke VOICE mode me jawab do: HAMESHA Pure Urdu Script (اردو رسم الخط) me mukammal aur ba-maani sentence likho taake audio natural sunayi de.
+- Baat hamesha poori karo, kabhi adhoora sentence mat chhorna.
 
 ==================================================
-2. STORE & BUSINESS DETAILS:
+2. STORE & LATEST PRODUCT RATES:
 ==================================================
-- Location: Sargodha, Punjab, Pakistan.
-- Main Products:
-  1. Standard/Normal Electric Switches & Sockets (Rs. 150 - Rs. 350 per piece)
-  2. Wi-Fi Touch Smart Switches (Rs. 1,800 - Rs. 3,500 per piece) - App & Voice (Alexa/Google) control.
-  3. Complete Switchboards & Sets (Rs. 800 - Rs. 2,500)
-  4. Circuit Breakers, Distribution Boxes, & Smart Automation Modules.
-- Delivery:
-  * Sargodha City: Same-day / Next-day Home Delivery.
-  * Across Pakistan: Courier service (TCS/Leopards) ke zariye 2-4 working days me.
-- Business Hours: 10:00 AM se 9:00 PM.
+Location: Sargodha, Punjab, Pakistan.
+Current Product Rates:
+${productsListText}
+
+Delivery Details:
+* Sargodha City: Same-day / Next-day Home Delivery.
+* Across Pakistan: Courier service (TCS/Leopards) ke zariye 2-4 working days me.
+Business Hours: 10:00 AM se 9:00 PM.
 
 ==================================================
 3. CONVERSATION & SALES RULES:
 ==================================================
 1. CHAT HISTORY CHECK: Message ka jawab dene se pehle purani chat history parho.
-2. NEED ASSESSMENT: Agar customer pooche ke konsa switch behtar hai, toh unse unki requirement (Normal Wiring ya Smart Home Setup) poocho.
-3. PRICE FLEXIBILITY: Price par bargain karein toh polite raho.
+2. PRODUCT NAMES: Customers ko HAMESHA full aur proper product name batao, nickname kabhi mat use karo.
+3. AGAR CUSTOMER TEXT / LIKH KAR / RATE LIST MAANGE: Toh poori details aur rate list clear formats mein text mein provide karo.
 4. ORDER TAKING TRIGGER:
    - Jab customer bole: "Order kar do", "Parcel bhej do", "Pack kar do", "Send kar do", ya "Final karo":
    - Step A: Pehle order kiye gaye items aur total price ki confirmation do.
@@ -144,20 +182,13 @@ Tumhara maqsad WhatsApp par aane wale customers ke sawalat ka jawab dena, unki z
    - Agar technical specification ya bulk demand ho jo pata na ho, toh bolo:
      Text Mode: "Main aap ka paigham store owner ko forward kar raha hoon. Woh jald hi aap se direct rabta kar ke guide kar dein ge."
      Voice Mode: "میں آپ کا پیغام اسٹور کے مالک کو فارورڈ کر رہا ہوں۔ وہ جلد ہی آپ سے براہ راست رابطہ کر کے گائیڈ کر دیں گے۔"
-
-==================================================
-4. STRICT RESTRICTIONS:
-==================================================
-- Extra baatein mat karo, faaltu lamba text mat likho.
 `;
+}
 
-let mongoClient = null;
-let isConnecting = false;
-
-// Clear Pakistani Urdu Voice Generator
+// Male Urdu Voice Generator
 async function generateNaturalAudio(text, outputPath) {
     const tts = new EdgeTTS({
-        voice: 'ur-PK-UzmaNeural', // Clean Natural Pakistani Urdu Voice
+        voice: 'ur-PK-AsadNeural',
         lang: 'ur-PK',
         outputFormat: 'audio-24khz-48kbitrate-mono-mp3'
     });
@@ -165,19 +196,22 @@ async function generateNaturalAudio(text, outputPath) {
     return outputPath;
 }
 
-// User ki demand check karne ke keywords
+function checkForTextRequest(text) {
+    if (!text) return false;
+    const lower = text.toLowerCase();
+    const textKeywords = [
+        'text', 'likh', 'likho', 'likha', 'likhna', 'likh kar', 'likh ke', 'likh do',
+        'message me', 'msg me', 'text me', 'rate list', 'ratelist', 'rates', 'list',
+        'detail', 'details', 'تکست', 'لکھ', 'ریٹ', 'لسٹ'
+    ];
+    return textKeywords.some(keyword => lower.includes(keyword));
+}
+
 function checkForVoiceRequest(text) {
     if (!text) return false;
     const lower = text.toLowerCase();
     const voiceKeywords = ['voice', 'vois', 'vn', 'voice note', 'voice me', 'voice main', 'bol ke', 'bol kar', 'bolen', 'bolo', 'batao voice', 'audio', 'آواز', 'وائس'];
     return voiceKeywords.some(keyword => lower.includes(keyword));
-}
-
-function checkForTextRequest(text) {
-    if (!text) return false;
-    const lower = text.toLowerCase();
-    const textKeywords = ['text', 'likh kar', 'likh ke', 'message me', 'msg me', 'text me', 'likho', 'likh do', 'تکست', 'لکھ'];
-    return textKeywords.some(keyword => lower.includes(keyword));
 }
 
 async function startBot() {
@@ -192,6 +226,7 @@ async function startBot() {
 
         const db = mongoClient.db('whatsapp_bot');
         const collection = db.collection('auth_session');
+        ratesCollection = db.collection('product_rates');
 
         const { state, saveCreds } = await useMongoDBAuthState(collection);
 
@@ -254,8 +289,11 @@ async function startBot() {
             const isAudio = !!m.message.audioMessage;
             const text = (m.message.conversation || m.message.extendedTextMessage?.text || "").trim();
 
+            // OWNER COMMANDS HANDLING (Only works from logged-in WhatsApp)
             if (isFromMe && text) {
                 const cleanText = text.toLowerCase();
+
+                // Bot Control Commands
                 if (cleanText === 'off') {
                     pausedChats.add(sender);
                     await sock.sendMessage(sender, { delete: m.key });
@@ -267,6 +305,48 @@ async function startBot() {
                     await sock.sendMessage(sender, { delete: m.key });
                     return;
                 }
+
+                // Dynamic Rate Update Command: /ratechange [nickname] [new price]
+                if (text.startsWith('/ratechange')) {
+                    const parts = text.split(' ');
+                    if (parts.length >= 3) {
+                        const nickname = parts[1].toLowerCase();
+                        const newPrice = parts.slice(2).join(' ');
+
+                        let productName = defaultProducts[nickname]?.name || nickname;
+
+                        // Check if exists in DB to retain existing full name
+                        const existingDoc = await ratesCollection.findOne({ nickname });
+                        if (existingDoc && existingDoc.name) {
+                            productName = existingDoc.name;
+                        }
+
+                        const priceFormatted = newPrice.toLowerCase().includes('rs') ? newPrice : `Rs. ${newPrice}`;
+
+                        await ratesCollection.updateOne(
+                            { nickname: nickname },
+                            { $set: { nickname: nickname, name: productName, price: priceFormatted } },
+                            { upsert: true }
+                        );
+
+                        await sock.sendMessage(sender, { 
+                            text: `✅ *Rate Updated Successfully!*\n\n📦 *Product:* ${productName}\n🏷️ *New Rate:* ${priceFormatted}` 
+                        });
+                    } else {
+                        await sock.sendMessage(sender, { 
+                            text: `❌ *Invalid Format!*\nUse: \`/ratechange wifi-switch 2000\`\nAvailable Nicknames:\n- \`wifi-switch\`\n- \`normal-switch\`\n- \`board\`\n- \`breaker\`` 
+                        });
+                    }
+                    return;
+                }
+
+                // Show Current Rates List to Owner
+                if (cleanText === '/ratelist') {
+                    const currentRatesText = await getDynamicProductsText();
+                    await sock.sendMessage(sender, { text: `📋 *Current Product Rates List:*\n\n${currentRatesText}` });
+                    return;
+                }
+
                 return;
             }
 
@@ -276,27 +356,30 @@ async function startBot() {
             if (!chatHistories[sender]) chatHistories[sender] = [];
 
             try {
-                // Determine whether output should be voice or text first
-                const userWantsText = checkForTextRequest(text);
-                const userWantsVoice = checkForVoiceRequest(text);
-
                 let sendAsVoice = false;
-                if (userWantsText) {
-                    sendAsVoice = false;
-                } else if (userWantsVoice) {
+
+                if (isAudio) {
                     sendAsVoice = true;
                 } else {
-                    sendAsVoice = isAudio;
+                    const userWantsVoice = checkForVoiceRequest(text);
+                    const userWantsText = checkForTextRequest(text);
+                    if (userWantsVoice && !userWantsText) {
+                        sendAsVoice = true;
+                    } else {
+                        sendAsVoice = false;
+                    }
                 }
 
                 let promptPayload;
 
                 if (isAudio) {
                     const audioBuffer = await downloadMediaMessage(m, 'buffer', {});
-                    const formatInstruction = sendAsVoice 
-                        ? "Is audio ko suno. Jawab Sirf 3 se 4 jumlo me exact URDU SCRIPT (اردو) me do." 
-                        : "Is audio ko suno. Jawab Sirf 3 se 4 jumlo me ROMAN URDU (English Alphabets) me do.";
-
+                    const formatInstruction = `
+[INSTRUCTION]: 
+1. Pehle customer ke is Voice Note ko achhi tarah suno.
+2. AGAR customer ne voice me "likh kar", "text me", "rate list", "list", "detail" wagaira maangi hai, toh JAWAB SIRF ROMAN URDU TEXT MEIN DO (Urdu script me mat dena).
+3. AGAR customer ne normal baat ki hai aur text nahi maanga, toh JAWAB PURE URDU SCRIPT (اردو) MEIN MUKAMMAL JUMLON MEIN DO.
+`;
                     promptPayload = [
                         {
                             inlineData: {
@@ -308,8 +391,8 @@ async function startBot() {
                     ];
                 } else {
                     const formatInstruction = sendAsVoice 
-                        ? " Jawab Sirf 1 se 2 jumlo me exact URDU SCRIPT (اردو) me do." 
-                        : " Jawab Sirf 1 se 2 jumlo me ROMAN URDU (English Alphabets) me do.";
+                        ? " [INSTRUCTION]: Jawab Sirf Urdu Script (اردو) me mukammal aur ba-maani 2-3 jumlo me do." 
+                        : " [INSTRUCTION]: Jawab Roman Urdu (English Alphabets) me do. Clear aur mukammal baatein batao.";
                     promptPayload = text + formatInstruction;
                 }
 
@@ -325,13 +408,17 @@ async function startBot() {
 
                 let responseText = null;
 
+                // Fetch latest dynamic rates from MongoDB for prompt
+                const currentRatesText = await getDynamicProductsText();
+                const currentSystemPrompt = getSystemPrompt(currentRatesText);
+
                 for (const modelName of modelsToTry) {
                     try {
                         const model = genAI.getGenerativeModel({ 
                             model: modelName,
-                            systemInstruction: systemPrompt,
+                            systemInstruction: currentSystemPrompt,
                             generationConfig: {
-                                maxOutputTokens: 250,
+                                maxOutputTokens: 500,
                             }
                         });
 
@@ -354,7 +441,13 @@ async function startBot() {
                     chatHistories[sender].push({ role: 'user', parts: [{ text: isAudio ? '[Voice Note Input]' : text }] });
                     chatHistories[sender].push({ role: 'model', parts: [{ text: responseText }] });
 
-                    if (sendAsVoice) {
+                    const isUrduScript = /[\u0600-\u06FF]/.test(responseText);
+
+                    if (isAudio && checkForTextRequest(responseText)) {
+                        sendAsVoice = false;
+                    }
+
+                    if (sendAsVoice && isUrduScript) {
                         const audioPath = path.join(__dirname, `reply_${Date.now()}.mp3`);
                         try {
                             await generateNaturalAudio(responseText, audioPath);
