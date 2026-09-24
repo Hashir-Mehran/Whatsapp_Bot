@@ -317,60 +317,64 @@ async function startBot() {
                 }
 
                 // Rate Change Command
-                if (text.startsWith('/ratechange')) {
-                    try {
-                        await sock.sendMessage(sender, { delete: m.key });
-                    } catch (err) {
-                        console.error("Could not delete command message:", err);
-                    }
+                // Rate Change Command
+if (text.startsWith('/ratechange')) {
+    try {
+        await sock.sendMessage(sender, { delete: m.key });
+    } catch (err) {
+        console.error("Could not delete command message:", err);
+    }
 
-                    const parts = text.split(' ');
-                    if (parts.length >= 3) {
-                        const nickname = parts[1].toLowerCase();
-                        const newPrice = parts.slice(2).join(' ');
+    const parts = text.split(' ');
+    if (parts.length >= 3) {
+        const nickname = parts[1].toLowerCase();
+        const newPrice = parts.slice(2).join(' ');
 
-                        let productName = defaultProducts[nickname]?.name || nickname;
+        let productName = defaultProducts[nickname]?.name || nickname;
 
-                        const existingDoc = await ratesCollection.findOne({ nickname });
-                        if (existingDoc && existingDoc.name) {
-                            productName = existingDoc.name;
-                        }
+        const existingDoc = await ratesCollection.findOne({ nickname });
+        if (existingDoc && existingDoc.name) {
+            productName = existingDoc.name;
+        }
 
-                        const priceFormatted = newPrice.toLowerCase().includes('rs') ? newPrice : `Rs. ${newPrice}`;
+        const priceFormatted = newPrice.toLowerCase().includes('rs') ? newPrice : `Rs. ${newPrice}`;
 
-                        await ratesCollection.updateOne(
-                            { nickname: nickname },
-                            { $set: { nickname: nickname, name: productName, price: priceFormatted } },
-                            { upsert: true }
-                        );
+        await ratesCollection.updateOne(
+            { nickname: nickname },
+            { $set: { nickname: nickname, name: productName, price: priceFormatted } },
+            { upsert: true }
+        );
 
-                        const sentMsg = await sock.sendMessage(sender, {
-                            text: `✅ *Rate Updated Successfully!*\n\n📦 *Product:* ${productName}\n🏷️ *New Rate:* ${priceFormatted}`
-                        });
+        // 🟢 FIX: Rate change hotay hi saari purani memory clear kar dein
+        Object.keys(chatHistories).forEach(key => delete chatHistories[key]);
 
-                        setTimeout(async () => {
-                            try {
-                                await sock.sendMessage(sender, { delete: sentMsg.key });
-                            } catch (err) {
-                                console.error("Could not auto-delete rate status message:", err);
-                            }
-                        }, 5000);
+        const sentMsg = await sock.sendMessage(sender, {
+            text: `✅ *Rate Updated Successfully!*\n\n📦 *Product:* ${productName}\n🏷️ *New Rate:* ${priceFormatted}`
+        });
 
-                    } else {
-                        const sentMsg = await sock.sendMessage(sender, {
-                            text: `❌ *Invalid Format!*\nUse: \`/ratechange wifi-switch 2000\`\nAvailable Nicknames:\n- \`wifi-switch\`\n- \`normal-switch\`\n- \`board\`\n- \`breaker\``
-                        });
+        setTimeout(async () => {
+            try {
+                await sock.sendMessage(sender, { delete: sentMsg.key });
+            } catch (err) {
+                console.error("Could not auto-delete rate status message:", err);
+            }
+        }, 5000);
 
-                        setTimeout(async () => {
-                            try {
-                                await sock.sendMessage(sender, { delete: sentMsg.key });
-                            } catch (err) {
-                                console.error("Could not auto-delete error status message:", err);
-                            }
-                        }, 5000);
-                    }
-                    return;
-                }
+    } else {
+        const sentMsg = await sock.sendMessage(sender, {
+            text: `❌ *Invalid Format!*\nUse: \`/ratechange wifi-switch 2000\`\nAvailable Nicknames:\n- \`wifi-switch\`\n- \`normal-switch\`\n- \`board\`\n- \`breaker\``
+        });
+
+        setTimeout(async () => {
+            try {
+                await sock.sendMessage(sender, { delete: sentMsg.key });
+            } catch (err) {
+                console.error("Could not auto-delete error status message:", err);
+            }
+        }, 5000);
+    }
+    return;
+}
 
                 if (cleanText === '/ratelist') {
                     try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) { }
