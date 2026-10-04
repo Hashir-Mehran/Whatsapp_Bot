@@ -1,6 +1,6 @@
 // ============================================================
-// ARRAIN BROS INC. - WhatsApp AI Sales Executive Bot (v3.1 FINAL)
-// Manual Self-Chat Protection + All Features
+// ARRAIN BROS INC. - WhatsApp AI Sales Executive Bot (v3.2 FINAL)
+// Manual Self-Chat Protection + All Features + Debug Logs
 // ============================================================
 
 require('dotenv').config();
@@ -64,8 +64,8 @@ let mongoClient = null;
 let isConnecting = false;
 let ratesCollection = null;
 let customRatesCollection = null;
-let selfChatCollection = null;      // ✅ NEW: Manual self-chat storage
-let ownerSelfNumber = null;         // ✅ NEW: Cached owner number
+let selfChatCollection = null;
+let ownerSelfNumber = null;
 
 // ============================================================
 // MONGODB AUTH STATE
@@ -135,7 +135,82 @@ function normalizePhone(raw) {
 }
 
 // ============================================================
-// GET DYNAMIC PRODUCTS (with custom rates)
+// ✅ STRONG SELF-CHAT DETECTOR (Multi-Layer)
+// ============================================================
+function detectSelfChat(sock, sender, ownerNumber) {
+    const senderClean = cleanJidNumber(sender);
+    const senderNorm = normalizePhone(senderClean);
+
+    const myClean = cleanJidNumber(sock.user?.id || '');
+    const myNorm = normalizePhone(myClean);
+
+    const ownerClean = ownerNumber ? cleanJidNumber(ownerNumber) : '';
+    const ownerNorm = ownerNumber ? normalizePhone(ownerClean) : '';
+
+    console.log(`   🔎 Detection check:`);
+    console.log(`      sender: raw="${sender}" clean="${senderClean}" norm="${senderNorm}"`);
+    console.log(`      my:     clean="${myClean}" norm="${myNorm}"`);
+    console.log(`      owner:  raw="${ownerNumber || 'NULL'}" clean="${ownerClean}" norm="${ownerNorm}"`);
+
+    // Method 1: Sender matches bot's own number (fromMe self-chat)
+    if (myClean && senderClean && myClean === senderClean) {
+        console.log(`      ✅ Match 1: sender == myNumber (sock.user.id)`);
+        return true;
+    }
+
+    // Method 2: Sender matches bot's own number (normalized)
+    if (myNorm && senderNorm && myNorm === senderNorm) {
+        console.log(`      ✅ Match 2: sender == myNumber (normalized)`);
+        return true;
+    }
+
+    // Method 3: Owner's saved number matches sender
+    if (ownerClean && senderClean && ownerClean === senderClean) {
+        console.log(`      ✅ Match 3: sender == ownerNumber`);
+        return true;
+    }
+
+    // Method 4: Owner's saved number matches sender (normalized)
+    if (ownerNorm && senderNorm && ownerNorm === senderNorm) {
+        console.log(`      ✅ Match 4: sender == ownerNumber (normalized)`);
+        return true;
+    }
+
+    // Method 5: Any of owner's variants match sender's variants
+    if (ownerNumber) {
+        const variants = [
+            ownerClean,
+            ownerNorm,
+            `+${ownerNorm}`,
+            `0${ownerNorm.slice(2)}`,
+            `92${ownerNorm.slice(2)}`
+        ];
+        const senderVariants = [
+            senderClean,
+            senderNorm,
+            `+${senderNorm}`,
+            `0${senderNorm.slice(2)}`,
+            `92${senderNorm.slice(2)}`
+        ];
+        const match = variants.some(v => v && senderVariants.includes(v));
+        if (match) {
+            console.log(`      ✅ Match 5: variant match`);
+            return true;
+        }
+    }
+
+    // Method 6: @lid format (fallback — agar owner number saved hai)
+    if (sender.includes('@lid') && ownerNumber && ownerNorm && ownerNorm.length >= 10) {
+        console.log(`      ⚠️  Match 6: @lid format + ownerNumber saved → treating as self-chat`);
+        return true;
+    }
+
+    console.log(`      ❌ No match`);
+    return false;
+}
+
+// ============================================================
+// GET DYNAMIC PRODUCTS
 // ============================================================
 async function getDynamicProductsText(customerJid = null) {
     try {
@@ -175,8 +250,6 @@ async function getDynamicProductsText(customerJid = null) {
                 ]
             }).toArray();
 
-            console.log(`🔍 Custom rate lookup for ${phoneNum}: found ${userCustomRates.length} entries`);
-
             userCustomRates.forEach(cr => {
                 customRatesMap[cr.nickname] = cr.price;
             });
@@ -196,7 +269,7 @@ async function getDynamicProductsText(customerJid = null) {
 }
 
 // ============================================================
-// GET RECENT PRODUCTS (last N days)
+// GET RECENT PRODUCTS
 // ============================================================
 async function getRecentProducts(days = 30) {
     try {
@@ -329,20 +402,16 @@ function checkForVoiceRequest(text) {
 }
 
 // ============================================================
-// OWNER COMMAND HANDLER (Manual Self-Chat + All Commands)
+// OWNER COMMAND HANDLER
 // ============================================================
 async function handleOwnerCommand(sock, m, text, sender) {
     const cleanText = text.toLowerCase().trim();
 
-    // ✅ MANUAL self-chat detection (saved number se)
-    const isSelfChat = (() => {
-        if (!ownerSelfNumber) return false;
-        try {
-            const senderNumber = cleanJidNumber(sender);
-            const normalizedOwner = normalizePhone(ownerSelfNumber);
-            return senderNumber === normalizedOwner;
-        } catch { return false; }
-    })();
+    // ✅ STRONG self-chat detection
+    console.log(`\n🔍 [Owner Command Received]`);
+    console.log(`   text: "${text}"`);
+    const isSelfChat = detectSelfChat(sock, sender, ownerSelfNumber);
+    console.log(`   🎯 isSelfChat = ${isSelfChat}\n`);
 
     // Command delete: sirf customer chats me
     const deleteCommandMsg = async () => {
@@ -359,10 +428,9 @@ async function handleOwnerCommand(sock, m, text, sender) {
     };
 
     // ============================================================
-    // ✅ /selfchat COMMAND — Set/Cancel owner self-chat protection
+    // /selfchat COMMAND
     // ============================================================
     if (text.startsWith('/selfchat')) {
-        // Yeh command HAMESHA delete hogi (self chat me bhi) taake clean rahe
         try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) {}
 
         const parts = text.split(' ').filter(p => p.trim().length > 0);
@@ -383,16 +451,17 @@ async function handleOwnerCommand(sock, m, text, sender) {
             return true;
         }
 
-        // -- SHOW CURRENT --
+        // -- SHOW --
         if (['show', 'status', 'list'].includes(arg)) {
+            const botNumber = cleanJidNumber(sock.user?.id || '');
             const sentMsg = await sock.sendMessage(sender, {
                 text: ownerSelfNumber
-                    ? `📌 *Current Self-Chat Number:*\n👤 \`${ownerSelfNumber}\`\n\nℹ️ Is number ki chat me commands delete NAHI hote.\n\nCancel: \`/selfchat cancel\``
-                    : `ℹ️ Koi self-chat number set nahi hai.\n\nSet karne ke liye:\n\`/selfchat 923001234567\``
+                    ? `📌 *Self-Chat Protection Status:*\n\n👤 Saved: \`${ownerSelfNumber}\`\n🤖 Bot: \`${botNumber}\`\n\nℹ️ Is number ki chat me commands delete NAHI hote.\n\nCancel: \`/selfchat cancel\``
+                    : `ℹ️ Koi self-chat number set nahi hai.\n\n🤖 Bot number: \`${botNumber}\`\n\nSet karne ke liye:\n\`/selfchat ${botNumber}\``
             });
             setTimeout(async () => {
                 try { await sock.sendMessage(sender, { delete: sentMsg.key }); } catch (e) {}
-            }, 8000);
+            }, 12000);
             return true;
         }
 
@@ -417,7 +486,7 @@ async function handleOwnerCommand(sock, m, text, sender) {
             );
 
             const sentMsg = await sock.sendMessage(sender, {
-                text: `✅ *Self-Chat Protection SET!*\n\n👤 *Number:* \`${newNumber}\`\n\nℹ️ Ab is number ki "You" chat me kuch bhi delete NAHI hoga.\n\n📋 Cancel karne ke liye: \`/selfchat cancel\`\n📋 Check karne ke liye: \`/selfchat show\``
+                text: `✅ *Self-Chat Protection SET!*\n\n👤 *Number:* \`${newNumber}\`\n\nℹ️ Ab is number ki "You" chat me kuch bhi delete NAHI hoga.\n\n📋 Cancel: \`/selfchat cancel\`\n📋 Show: \`/selfchat show\``
             });
             setTimeout(async () => {
                 try { await sock.sendMessage(sender, { delete: sentMsg.key }); } catch (e) {}
@@ -426,8 +495,9 @@ async function handleOwnerCommand(sock, m, text, sender) {
         }
 
         // -- HELP --
+        const botNumber = cleanJidNumber(sock.user?.id || '');
         const sentMsg = await sock.sendMessage(sender, {
-            text: `📌 *Self-Chat Command Help:*\n\n• \`/selfchat 923001234567\` — Apna number set karo (delete protection ON)\n• \`/selfchat cancel\` — Protection hataao\n• \`/selfchat show\` — Current number dekho`
+            text: `📌 *Self-Chat Help:*\n\n• \`/selfchat ${botNumber || '923001234567'}\` — Set protection\n• \`/selfchat cancel\` — Remove protection\n• \`/selfchat show\` — Current status`
         });
         setTimeout(async () => {
             try { await sock.sendMessage(sender, { delete: sentMsg.key }); } catch (e) {}
@@ -728,16 +798,16 @@ async function startBot() {
         const collection = db.collection('auth_session');
         ratesCollection = db.collection('product_rates');
         customRatesCollection = db.collection('customer_custom_rates');
-        selfChatCollection = db.collection('owner_self_chat');   // ✅ NEW
+        selfChatCollection = db.collection('owner_self_chat');
 
-        // ✅ Load saved self-chat number from DB
+        // Load saved self-chat number
         try {
             const selfChatDoc = await selfChatCollection.findOne({ _id: 'owner' });
             if (selfChatDoc && selfChatDoc.number) {
                 ownerSelfNumber = selfChatDoc.number;
                 console.log(`📌 Owner self-chat number loaded: ${ownerSelfNumber}`);
             } else {
-                console.log(`📌 No owner self-chat set. Use /selfchat 923001234567 to set.`);
+                console.log(`📌 No owner self-chat set. Use /selfchat <number> to set.`);
             }
         } catch (e) {
             console.log(`📌 Self-chat lookup skipped (first run).`);
@@ -786,7 +856,8 @@ async function startBot() {
                 if (ownerSelfNumber) {
                     console.log(`📌 Self-Chat Protection: ACTIVE for ${ownerSelfNumber}`);
                 } else {
-                    console.log(`⚠️  Self-Chat Protection: NOT SET (use /selfchat <number>)`);
+                    console.log(`⚠️  Self-Chat Protection: NOT SET`);
+                    console.log(`    ➜ Apne "Message Yourself" chat me bhejein: /selfchat ${cleanJidNumber(sock.user?.id || '')}`);
                 }
                 console.log('');
             }
@@ -818,7 +889,7 @@ async function startBot() {
                 if (!allowedGroups.has(sender)) return;
             }
 
-            // OWNER COMMANDS (Personal Chat Only)
+            // OWNER COMMANDS
             if (isFromMe && text && !isGroup) {
                 const handled = await handleOwnerCommand(sock, m, text, sender);
                 if (handled) return;
@@ -849,7 +920,7 @@ async function startBot() {
 1. Customer ki voice note sun kar jawab do.
 2. Agar customer ne voice me "likh kar", "text me", "rate list", "list", "detail" maangi ho, toh Roman Urdu TEXT me reply do.
 3. Warna normal dialogue ke liye PURE URDU SCRIPT (اردو) me 2-3 sentences me jawab do.
-4. IMPORTANT: Product ka POORA naam use karo (jaise "Universal Socket (10A)", na ke sirf "Socket").
+4. IMPORTANT: Product ka POORA naam use karo.
 `;
                     promptPayload = [
                         {
