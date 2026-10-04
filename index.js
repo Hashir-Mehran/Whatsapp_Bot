@@ -1,5 +1,6 @@
 // ============================================================
-// ARRAIN BROS INC. - WhatsApp AI Sales Executive Bot (v3.0 FINAL)
+// ARRAIN BROS INC. - WhatsApp AI Sales Executive Bot (v3.1 FINAL)
+// Manual Self-Chat Protection + All Features
 // ============================================================
 
 require('dotenv').config();
@@ -63,6 +64,8 @@ let mongoClient = null;
 let isConnecting = false;
 let ratesCollection = null;
 let customRatesCollection = null;
+let selfChatCollection = null;      // ✅ NEW: Manual self-chat storage
+let ownerSelfNumber = null;         // ✅ NEW: Cached owner number
 
 // ============================================================
 // MONGODB AUTH STATE
@@ -326,33 +329,111 @@ function checkForVoiceRequest(text) {
 }
 
 // ============================================================
-// OWNER COMMAND HANDLER (Self-Chat Me Delete Nahi)
+// OWNER COMMAND HANDLER (Manual Self-Chat + All Commands)
 // ============================================================
 async function handleOwnerCommand(sock, m, text, sender) {
     const cleanText = text.toLowerCase().trim();
 
-    // ✅ Detect: Owner apne "You" chat me hai?
+    // ✅ MANUAL self-chat detection (saved number se)
     const isSelfChat = (() => {
+        if (!ownerSelfNumber) return false;
         try {
-            const myNumber = cleanJidNumber(sock.user?.id || '');
             const senderNumber = cleanJidNumber(sender);
-            return myNumber && senderNumber && myNumber === senderNumber;
+            const normalizedOwner = normalizePhone(ownerSelfNumber);
+            return senderNumber === normalizedOwner;
         } catch { return false; }
     })();
 
-    // ✅ Sirf customer chats me command delete karo
+    // Command delete: sirf customer chats me
     const deleteCommandMsg = async () => {
         if (isSelfChat) return;
         try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) {}
     };
 
-    // ✅ Sirf customer chats me reply auto-delete karo
+    // Bot reply auto-delete: sirf customer chats me
     const autoDelete = async (sentMsg, delay = 5000) => {
         if (isSelfChat) return;
         setTimeout(async () => {
             try { await sock.sendMessage(sender, { delete: sentMsg.key }); } catch (err) {}
         }, delay);
     };
+
+    // ============================================================
+    // ✅ /selfchat COMMAND — Set/Cancel owner self-chat protection
+    // ============================================================
+    if (text.startsWith('/selfchat')) {
+        // Yeh command HAMESHA delete hogi (self chat me bhi) taake clean rahe
+        try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) {}
+
+        const parts = text.split(' ').filter(p => p.trim().length > 0);
+        const arg = parts[1] ? parts[1].toLowerCase() : '';
+
+        // -- CANCEL --
+        if (['cancel', 'off', 'reset', 'delete', 'remove'].includes(arg)) {
+            const oldNumber = ownerSelfNumber;
+            ownerSelfNumber = null;
+            await selfChatCollection.deleteOne({ _id: 'owner' });
+
+            const sentMsg = await sock.sendMessage(sender, {
+                text: `✅ *Self-Chat Protection CANCELLED!*\n\n${oldNumber ? `👤 Purana number: \`${oldNumber}\`\n` : ''}ℹ️ Ab is chat me commands phir auto-delete honge.`
+            });
+            setTimeout(async () => {
+                try { await sock.sendMessage(sender, { delete: sentMsg.key }); } catch (e) {}
+            }, 5000);
+            return true;
+        }
+
+        // -- SHOW CURRENT --
+        if (['show', 'status', 'list'].includes(arg)) {
+            const sentMsg = await sock.sendMessage(sender, {
+                text: ownerSelfNumber
+                    ? `📌 *Current Self-Chat Number:*\n👤 \`${ownerSelfNumber}\`\n\nℹ️ Is number ki chat me commands delete NAHI hote.\n\nCancel: \`/selfchat cancel\``
+                    : `ℹ️ Koi self-chat number set nahi hai.\n\nSet karne ke liye:\n\`/selfchat 923001234567\``
+            });
+            setTimeout(async () => {
+                try { await sock.sendMessage(sender, { delete: sentMsg.key }); } catch (e) {}
+            }, 8000);
+            return true;
+        }
+
+        // -- SET NUMBER --
+        if (arg && /^[0-9+\s-]+$/.test(arg)) {
+            const newNumber = normalizePhone(arg);
+            if (!newNumber || newNumber.length < 10) {
+                const sentMsg = await sock.sendMessage(sender, {
+                    text: `❌ *Invalid number!*\n\nSahi format: \`/selfchat 923001234567\``
+                });
+                setTimeout(async () => {
+                    try { await sock.sendMessage(sender, { delete: sentMsg.key }); } catch (e) {}
+                }, 6000);
+                return true;
+            }
+
+            ownerSelfNumber = newNumber;
+            await selfChatCollection.updateOne(
+                { _id: 'owner' },
+                { $set: { _id: 'owner', number: newNumber, updatedAt: new Date() } },
+                { upsert: true }
+            );
+
+            const sentMsg = await sock.sendMessage(sender, {
+                text: `✅ *Self-Chat Protection SET!*\n\n👤 *Number:* \`${newNumber}\`\n\nℹ️ Ab is number ki "You" chat me kuch bhi delete NAHI hoga.\n\n📋 Cancel karne ke liye: \`/selfchat cancel\`\n📋 Check karne ke liye: \`/selfchat show\``
+            });
+            setTimeout(async () => {
+                try { await sock.sendMessage(sender, { delete: sentMsg.key }); } catch (e) {}
+            }, 10000);
+            return true;
+        }
+
+        // -- HELP --
+        const sentMsg = await sock.sendMessage(sender, {
+            text: `📌 *Self-Chat Command Help:*\n\n• \`/selfchat 923001234567\` — Apna number set karo (delete protection ON)\n• \`/selfchat cancel\` — Protection hataao\n• \`/selfchat show\` — Current number dekho`
+        });
+        setTimeout(async () => {
+            try { await sock.sendMessage(sender, { delete: sentMsg.key }); } catch (e) {}
+        }, 12000);
+        return true;
+    }
 
     // -------- ON / OFF --------
     if (cleanText === 'off' || cleanText === 'stop') {
@@ -647,6 +728,20 @@ async function startBot() {
         const collection = db.collection('auth_session');
         ratesCollection = db.collection('product_rates');
         customRatesCollection = db.collection('customer_custom_rates');
+        selfChatCollection = db.collection('owner_self_chat');   // ✅ NEW
+
+        // ✅ Load saved self-chat number from DB
+        try {
+            const selfChatDoc = await selfChatCollection.findOne({ _id: 'owner' });
+            if (selfChatDoc && selfChatDoc.number) {
+                ownerSelfNumber = selfChatDoc.number;
+                console.log(`📌 Owner self-chat number loaded: ${ownerSelfNumber}`);
+            } else {
+                console.log(`📌 No owner self-chat set. Use /selfchat 923001234567 to set.`);
+            }
+        } catch (e) {
+            console.log(`📌 Self-chat lookup skipped (first run).`);
+        }
 
         const { state, saveCreds } = await useMongoDBAuthState(collection);
 
@@ -686,7 +781,14 @@ async function startBot() {
                 }
             } else if (connection === 'open') {
                 isConnecting = false;
-                console.log('\n✅ WhatsApp Bot Connected Successfully!\n');
+                console.log('\n✅ WhatsApp Bot Connected Successfully!');
+                console.log(`📱 Bot Number: ${cleanJidNumber(sock.user?.id || '')}`);
+                if (ownerSelfNumber) {
+                    console.log(`📌 Self-Chat Protection: ACTIVE for ${ownerSelfNumber}`);
+                } else {
+                    console.log(`⚠️  Self-Chat Protection: NOT SET (use /selfchat <number>)`);
+                }
+                console.log('');
             }
         });
 
