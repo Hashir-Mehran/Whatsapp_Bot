@@ -1,0 +1,303 @@
+🔑 Bot Me Use Hone Wali SAARI "/" Commands (Keys)
+Achha bhai, samajh gaya! Aap slash (/) wali commands ki baat kar rahe hain — jo bot me type karke use hoti hain. Yeh rahi poori list ek jagah:
+
+📋 Complete Commands List (Saari / Wali Keys)
+👤 1. Owner Commands — Apne "You" Chat Me
+(Yahan kuch bhi delete nahi hoga — sab visible rahega)
+
+#	Command	Format	Kaam
+1	/list	/list	Poori rate list dekho
+2	/rates	/rates	Same as /list (alias)
+3	/ratelist	/ratelist	Same as /list (alias)
+4	/newlist	/newlist	Last 30 din ke naye products
+5	/newproducts	/newproducts	Same as /newlist (alias)
+6	/addproduct	/addproduct key | Full Name | Price	Naya product add karo
+7	/rate	/rate key newprice	Kisi product ka rate update karo
+8	/rename	/rename key New Full Name	Product ka naam badlo
+9	/customrate	/customrate 923001234567 key price	VIP special rate set karo
+10	/customrate	/customrate 923001234567 key cancel	VIP rate hataao
+11	/customlist	/customlist	Saare VIP rates dekho
+12	/seed	/seed	Default rates DB me reset karo
+🟢 2. Non-Slash Commands (Owner)
+#	Command	Kaam
+1	off	Specific chat me bot pause karo
+2	stop	Same as off
+3	on	Chat me bot resume karo
+4	start	Same as on
+5	gon	Group me bot ON
+6	groupchaton	Same as gon
+7	goff	Group me bot OFF
+8	groupchatoff	Same as goff
+📖 Har Command Ki Detail (Example Ke Saath)
+🔹 /list ya /rates ya /ratelist
+Kaam: Poori current rate list dikhata hai
+
+text
+/list
+Reply:
+
+text
+📋 Current Product & Rates:
+
+- [wifi] Wi-Fi Touch Smart Switch (App & Voice Control): Rs. 4,500 per piece
+- [normal] Standard Electric Switch & Socket: Rs. 150 - Rs. 350 per piece
+- [board] Complete Switchboard & Set: Rs. 800 - Rs. 2,500
+- [breaker] Circuit Breakers & Smart Distribution Boxes: Rs. 2,000 - Rs. 4,000
+- [breaker_sm] Circuit Breaker (Small): Rs. 1,000 - Rs. 2,000
+- [usocket] Universal Socket (10A): Rate jaan'ne ke liye quantity bata dein.
+🔹 /newlist ya /newproducts
+Kaam: Last 30 din me add kiye gaye naye products dikhata hai
+
+text
+/newlist
+Reply:
+
+text
+🆕 Recently Added Products (Last 30 Days):
+
+🆕 *Universal Socket (10A)* (`usocket`)
+   🏷️ Rate jaan'ne ke liye quantity bata dein.
+   📅 10/4/2026
+🔹 /addproduct
+Kaam: Naya product add karo (3 parts | se separate)
+
+text
+/addproduct usocket | Universal Socket (10A) | Qty batao
+Format: /addproduct key | Full Name | Price
+
+Reply:
+
+text
+✅ New Product Added!
+📦 Key: `usocket`
+📛 Name: Universal Socket (10A)
+🏷️ Price: Qty batao
+🔹 /rate
+Kaam: Kisi existing product ka rate update karo
+
+text
+/rate wifi 4500
+Reply:
+
+text
+✅ Rate Updated!
+📦 `wifi`
+🏷️ Rs. 4500
+🔹 /rename
+Kaam: Product ka naam change karo (rate same rahega)
+
+text
+/rename wifi Smart Touch Switch 6-Button
+Reply:
+
+text
+✅ Name Updated!
+📦 `wifi`
+🏷️️ Smart Touch Switch 6-Button
+🔹 /customrate (SET)
+Kaam: Kisi specific customer ko special/VIP rate dena
+
+text
+/customrate 923001234567 wifi 4000
+Format: /customrate [customer_number] key price
+
+Reply:
+
+text
+✅ Custom Rate Set!
+👤 Customer: `923001234567`
+📦 Product: `wifi`
+🏷️ Special Rate: Rs. 4000
+
+ℹ️ Ab jab yeh customer poochega, yeh rate hi batayega.
+⚠️ Number Format:
+
+923001234567 ✅ (best)
+
+03001234567 ✅ (auto-convert hoga)
+
++923001234567 ✅ (auto-convert hoga)
+
+🔹 /customrate (CANCEL)
+Kaam: VIP rate cancel karo, normal rate wapas laao
+
+text
+/customrate 923001234567 wifi cancel
+Ya:
+
+text
+/customrate 923001234567 wifi reset
+/customrate 923001234567 wifi delete
+Reply:
+
+text
+✅ Custom Rate Cancelled!
+👤 Customer: `923001234567`
+📦 Product: `wifi`
+ℹ️ Ab normal rates show honge.
+🔹 /customlist
+Kaam: Saare active VIP rates ki list
+
+text
+/customlist
+Reply:
+
+text
+📊 Active Custom Rates:
+
+👤 923001234567 | 📦 `wifi` ➔ 🏷️ Rs. 4000
+👤 923009999999 | 📦 `board` ➔ 🏷️ Rs. 2000
+🔹 /seed
+Kaam: Default products ki rates DB me reset karein
+
+text
+/seed
+Reply:
+
+text
+✅ Default products seeded/updated successfully!
+Kab use karein:
+
+Bot pehli baar setup kar rahe ho
+
+Rates ghalat ho gaye hon
+
+Fresh start chahiye
+
+🔹 off / stop
+Kaam: Specific customer chat me bot pause karo
+
+text
+off
+Kya hota hai: Us chat me AI reply dena band kar dega
+
+🔹 on / start
+Kaam: Bot ko dobara activate karo
+
+text
+on
+Kya hota hai: AI phir se replies dega
+
+🔹 gon / groupchaton
+Kaam: Group me bot ko active karo
+
+text
+gon
+Kya hota hai: Us group me bot replies dega (default me groups silent hote hain)
+
+🔹 goff / groupchatoff
+Kaam: Group me bot band karo
+
+text
+goff
+🎯 Quick Reference Card (Copy-Paste Ready)
+bash
+# ============ LIST & RATES ============
+/list                              # Full rate list
+/rates                             # Alias of /list
+/ratelist                          # Alias of /list
+/newlist                           # Recently added products (30 days)
+/newproducts                       # Alias of /newlist
+
+# ============ ADD / UPDATE / RENAME ============
+/addproduct key | Full Name | Price    # Add new product
+/rate key newprice                     # Update rate
+/rename key New Full Name              # Rename product
+
+# ============ VIP CUSTOM RATES ============
+/customrate 923001234567 key price     # Set VIP rate
+/customrate 923001234567 key cancel    # Cancel VIP rate
+/customlist                            # Show all VIP rates
+
+# ============ SYSTEM ============
+/seed                              # Reset to default rates
+
+# ============ CHAT CONTROLS ============
+off                                # Pause bot (specific chat)
+on                                 # Resume bot
+gon                                # Group bot ON
+goff                               # Group bot OFF
+📊 Saare Commands Ka Summary Table
+Command	Type	Kaam	Delete Hoga?
+/list	Info	Rate list dekho	Self: ❌ / Customer: ✅
+/rates	Info	Rate list dekho	Self: ❌ / Customer: ✅
+/ratelist	Info	Rate list dekho	Self: ❌ / Customer: ✅
+/newlist	Info	Naye products	Self: ❌ / Customer: ✅
+/newproducts	Info	Naye products	Self: ❌ / Customer: ✅
+/addproduct	Action	Product add	Self: ❌ / Customer: ✅
+/rate	Action	Rate update	Self: ❌ / Customer: ✅
+/rename	Action	Naam badlo	Self: ❌ / Customer: ✅
+/customrate ...	Action	VIP rate set	Self: ❌ / Customer: ✅
+/customrate ... cancel	Action	VIP rate hataao	Self: ❌ / Customer: ✅
+/customlist	Info	VIP rates list	Self: ❌ / Customer: ✅
+/seed	System	Default reset	Self: ❌ / Customer: ✅
+off / stop	Control	Bot pause	Self: ❌ / Customer: ✅
+on / start	Control	Bot resume	Self: ❌ / Customer: ✅
+gon	Group	Group ON	✅ (hamesha)
+goff	Group	Group OFF	✅ (hamesha)
+Note:
+
+Self chat = Aap apne "Message Yourself" me type karein → kuch delete nahi hoga
+
+Customer chat = Customer ke chat me aap command bhejein → auto-delete ho jayega
+
+Group commands = Hamesha delete honge (taakay kisi ko pata na chale)
+
+💡 Real-Life Usage Scenarios
+Scenario 1: Naya Product Add Karna
+text
+1. Apne chat me bhejein:
+   /addproduct usocket | Universal Socket (10A) | Qty batao
+   
+2. Confirm reply aayegi (self chat me rahegi)
+3. Customer poochega "Universal Socket ka rate?" 
+   → AI full name bolega: "Universal Socket (10A)"
+Scenario 2: VIP Customer Ko Discount Dena
+text
+1. Apne chat me bhejein:
+   /customrate 923001234567 wifi 4000
+   
+2. Us customer (923001234567) ko message karein "Wifi ka rate?"
+   → AI bolega: "Rs. 4000" (special rate)
+   
+3. Baaki customers ko normal "Rs. 4,500" batayega
+Scenario 3: Rate Change Karna
+text
+1. Apne chat me bhejein:
+   /rate wifi 5000
+   
+2. Ab sab customers ko naya rate "Rs. 5000" batayega
+   (Except VIP customers jinke custom rate set hain)
+Scenario 4: Kisi Customer Ka Bot Band Karna
+text
+1. Us customer ke chat me (aap ke WhatsApp se) bhejein:
+   off
+   
+2. Us chat me AI reply dena band kar dega
+3. Baaki customers ko normal reply karta rahega
+
+4. Dobara chalu karne ke liye:
+   on
+Scenario 5: Group Me Bot Activate Karna
+text
+Default: Groups silent hain
+
+1. Group me bhejein:
+   gon
+   → Command auto-delete ho jayegi
+   → Ab us group me AI replies dega
+
+2. Band karne ke liye:
+   goff
+⚠️ Command Tips
+Space sahi rakhein: /rate wifi 4500 (theek hai) vs /ratewifi4500 (galat)
+
+Pipe | zaroori hai /addproduct me: /addproduct key | Name | Price
+
+Numbers normalize ho jaate hain: 0300... ya +92300... sab 92300... me convert
+
+Cancel ke 3 alfaaz: cancel, reset, delete — koi bhi chalega
+
+Self chat me test karein pehle, phir customer pe use karein
+
+Bhai bas! Yeh poori list hai saari / wali keys ki. Total 12 slash commands aur 4 non-slash commands hain. Har ek ka format, example, aur usage likh diya hai. 🚀

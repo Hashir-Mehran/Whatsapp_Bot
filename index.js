@@ -1,5 +1,5 @@
 // ============================================================
-// ARRAIN BROS INC. - WhatsApp AI Sales Executive Bot
+// ARRAIN BROS INC. - WhatsApp AI Sales Executive Bot (v3.0 FINAL)
 // ============================================================
 
 require('dotenv').config();
@@ -13,13 +13,13 @@ const { EdgeTTS } = require('node-edge-tts');
 const fs = require('fs');
 const path = require('path');
 
-// DNS fix (network issues ke liye)
+// DNS fix
 const dns = require('node:dns');
 dns.setDefaultResultOrder('ipv4first');
 dns.setServers(['8.8.8.8', '8.8.4.4']);
 
 // ============================================================
-// EXPRESS SERVER (Health Check - Render/Railway ke liye)
+// EXPRESS SERVER (Health Check)
 // ============================================================
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -30,7 +30,7 @@ app.get('/ping', (req, res) => res.send('Pong! Health OK.'));
 app.listen(PORT, () => console.log(`🌐 Server listening on port ${PORT}`));
 
 // ============================================================
-// ENV VARIABLES CHECK
+// ENV VARIABLES
 // ============================================================
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const MONGO_URI = process.env.MONGO_URI;
@@ -43,18 +43,20 @@ if (!GEMINI_API_KEY || !MONGO_URI) {
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 // ============================================================
-// GLOBAL STATE VARIABLES
+// GLOBAL STATE
 // ============================================================
-const pausedChats = new Set();        // Bot off kiye gaye chats
-const allowedGroups = new Set();      // Active groups
-const chatHistories = {};             // Customer memory
-const processedMessages = new Set();  // Duplicate prevention
+const pausedChats = new Set();
+const allowedGroups = new Set();
+const chatHistories = {};
+const processedMessages = new Set();
 
 const defaultProducts = {
-    'normal':  { name: 'Standard / Normal Electric Switch & Socket', price: 'Rs. 150 - Rs. 350 per piece' },
-    'wifi':    { name: 'Wi-Fi Touch Smart Switch (App & Voice Control)', price: 'Rs. 1,800 - Rs. 3,500 per piece' },
-    'board':   { name: 'Complete Switchboard & Set', price: 'Rs. 800 - Rs. 2,500' },
-    'breaker': { name: 'Circuit Breakers & Smart Distribution Boxes', price: 'Rs. 500 - Rs. 1,800' }
+    'wifi':       { name: 'Wi-Fi Touch Smart Switch (App & Voice Control)', price: 'Rs. 4,500 per piece' },
+    'normal':     { name: 'Standard Electric Switch & Socket', price: 'Rs. 150 - Rs. 350 per piece' },
+    'board':      { name: 'Complete Switchboard & Set', price: 'Rs. 800 - Rs. 2,500' },
+    'breaker':    { name: 'Circuit Breakers & Smart Distribution Boxes', price: 'Rs. 2,000 - Rs. 4,000' },
+    'breaker_sm': { name: 'Circuit Breaker (Small)', price: 'Rs. 1,000 - Rs. 2,000' },
+    'usocket':    { name: 'Universal Socket (10A)', price: "Rate jaan'ne ke liye quantity bata dein." }
 };
 
 let mongoClient = null;
@@ -63,7 +65,7 @@ let ratesCollection = null;
 let customRatesCollection = null;
 
 // ============================================================
-// MONGODB AUTH STATE (Baileys Session Persistence)
+// MONGODB AUTH STATE
 // ============================================================
 async function useMongoDBAuthState(collection) {
     const writeData = (data, id) => collection.replaceOne(
@@ -111,37 +113,66 @@ async function useMongoDBAuthState(collection) {
 }
 
 // ============================================================
-// HELPER FUNCTIONS
+// HELPERS
 // ============================================================
 function cleanJidNumber(rawJid) {
     if (!rawJid) return '';
-    return rawJid.split('@')[0].split(':')[0].trim();
+    let num = rawJid.split('@')[0];
+    num = num.split(':')[0];
+    num = num.replace(/\D/g, '');
+    return num;
 }
 
-// Fetch dynamic rates (General + Customer-specific)
+function normalizePhone(raw) {
+    if (!raw) return '';
+    let num = String(raw).replace(/\D/g, '');
+    if (num.startsWith('0')) num = '92' + num.slice(1);
+    if (num.length === 10 && num.startsWith('3')) num = '92' + num;
+    return num;
+}
+
+// ============================================================
+// GET DYNAMIC PRODUCTS (with custom rates)
+// ============================================================
 async function getDynamicProductsText(customerJid = null) {
     try {
         let products = await ratesCollection.find({}).toArray();
-        
-        // Agar DB khali hai toh defaults insert karo
+
         if (!products || products.length === 0) {
             for (const key of Object.keys(defaultProducts)) {
                 await ratesCollection.updateOne(
                     { nickname: key },
-                    { $set: { nickname: key, name: defaultProducts[key].name, price: defaultProducts[key].price } },
+                    {
+                        $set: {
+                            nickname: key,
+                            name: defaultProducts[key].name,
+                            price: defaultProducts[key].price,
+                            updatedAt: new Date()
+                        },
+                        $setOnInsert: { createdAt: new Date() }
+                    },
                     { upsert: true }
                 );
             }
             products = await ratesCollection.find({}).toArray();
         }
 
-        // Customer-specific custom rates
         let customRatesMap = {};
         if (customerJid) {
             const phoneNum = cleanJidNumber(customerJid);
+            const normalizedPhone = normalizePhone(phoneNum);
+
             const userCustomRates = await customRatesCollection.find({
-                $or: [{ customerId: phoneNum }, { customerId: customerJid }]
+                $or: [
+                    { customerId: phoneNum },
+                    { customerId: normalizedPhone },
+                    { customerId: customerJid },
+                    { customerId: `+${normalizedPhone}` },
+                    { customerId: `0${normalizedPhone.slice(2)}` }
+                ]
             }).toArray();
+
+            console.log(`🔍 Custom rate lookup for ${phoneNum}: found ${userCustomRates.length} entries`);
 
             userCustomRates.forEach(cr => {
                 customRatesMap[cr.nickname] = cr.price;
@@ -151,71 +182,118 @@ async function getDynamicProductsText(customerJid = null) {
         let productStr = "";
         products.forEach(p => {
             const finalPrice = customRatesMap[p.nickname] || p.price;
-            productStr += `- [${p.nickname}] ${p.name}: ${finalPrice}\n`;
+            const marker = customRatesMap[p.nickname] ? ' ⭐ (Special Rate)' : '';
+            productStr += `- [${p.nickname}] ${p.name}: ${finalPrice}${marker}\n`;
         });
         return productStr;
     } catch (e) {
         console.error("Error getting dynamic rates:", e);
-        return `- Standard Electric Switches: Rs. 150 - Rs. 350 per piece\n- Wi-Fi Touch Smart Switches: Rs. 1,800 - Rs. 3,500 per piece`;
+        return `- Standard Electric Switches: Rs. 150 - Rs. 350 per piece\n- Wi-Fi Touch Smart Switches: Rs. 4,500 per piece`;
     }
 }
 
 // ============================================================
-// AI SYSTEM PROMPT (Sales Executive Personality)
+// GET RECENT PRODUCTS (last N days)
+// ============================================================
+async function getRecentProducts(days = 30) {
+    try {
+        const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        const recent = await ratesCollection.find({
+            $or: [
+                { createdAt: { $gte: cutoff } },
+                { updatedAt: { $gte: cutoff } }
+            ]
+        }).sort({ createdAt: -1, updatedAt: -1 }).toArray();
+
+        if (recent.length === 0) return null;
+
+        let out = "";
+        recent.forEach(p => {
+            const dateStr = p.createdAt
+                ? new Date(p.createdAt).toLocaleDateString('en-PK')
+                : 'Recently added';
+            out += `🆕 *${p.name}* (\`${p.nickname}\`)\n   🏷️ ${p.price}\n   📅 ${dateStr}\n\n`;
+        });
+        return out;
+    } catch (e) {
+        console.error("Error fetching recent products:", e);
+        return null;
+    }
+}
+
+// ============================================================
+// SYSTEM PROMPT
 // ============================================================
 function getSystemPrompt(productsListText) {
     return `
 You are an experienced, sharp, and polite Sales Executive for "Arain Bros, Inc." (Electric & Smart Switch Store) based in Sargodha, Punjab, Pakistan. You handle customer chats on WhatsApp.
 
 ==================================================
-1. LOCAL MARKET DEALING & BEHAVIOR RULES (PAKISTANI STYLE)
+1. LOCAL MARKET DEALING & BEHAVIOR RULES
 ==================================================
 - FAST & DIRECT: Local customers prefer quick, short, to-the-point replies.
-- NO REPETITIVE GREETINGS: Never repeat "Salam" in every message. Only say "Wa'alaikumsalam" if user sends greeting FIRST.
-- NO ROBOTIC FLUFF: Avoid formal lines like "Arain Bros, Inc. mein aap ka khair khamdam hai".
-- RESPECTFUL LANGUAGE: Always use "Aap", "G bilkul", "Ji haan", "Bhai", "Sir".
-- CONVERSATION FLOW: Read chat history first. Track what customer is asking about.
+- NO REPETITIVE GREETINGS: Only say "Wa'alaikumsalam" if user greets FIRST.
+- NO ROBOTIC FLUFF: Avoid formal corporate intros.
+- RESPECTFUL LANGUAGE: Use "Aap", "G bilkul", "Ji haan", "Bhai", "Sir".
+- CONVERSATION FLOW: Read history first. Track what customer is asking.
 
 ==================================================
-2. LANGUAGE & COMMUNICATION STYLE
+2. LANGUAGE STYLE
 ==================================================
-- TEXT MODE: Natural Roman Urdu (Pakistani WhatsApp typing). Short lines, bullet points, bold prices.
-- VOICE MODE: Clear Urdu script (اردو رسم الخط) for TTS output. 2-3 complete sentences.
+- TEXT MODE: Natural Roman Urdu, short lines, bullet points, bold prices.
+- VOICE MODE: Clear Urdu script (اردو رسم الخط), 2-3 complete sentences.
 
 ==================================================
-3. CATALOG, PRICING & BUSINESS DETAILS
+3. PRODUCT LIST RULES (VERY IMPORTANT!)
 ==================================================
-Store Location: Sargodha, Punjab, Pakistan.
-Business Hours: 10:00 AM to 9:00 PM (PKT).
+- ALWAYS quote the FULL product name (not just last word).
+  ✅ CORRECT: "Universal Socket (10A)"
+  ❌ WRONG: "Socket" or "Universal"
 
-Current Product & Rate List for this customer:
+- When customer asks "Koi naya product?" / "New items?" / "Kya naya hai?":
+  → Politely list NEWLY ADDED products with FULL names.
+  → If none new, share a couple of popular items from the full list.
+
+- When customer asks about ANY product, use the EXACT name from the list below.
+- If customer shortens (e.g. "wifi switch"), map to the full name from list.
+
+==================================================
+4. CATALOG & PRICING (FOR THIS CUSTOMER)
+==================================================
+Store: Sargodha, Punjab, Pakistan.
+Business Hours: 10:00 AM - 9:00 PM (PKT).
+
 ${productsListText}
 
-Delivery & Payment:
-- Sargodha City: Same-day/Next-day Cash on Delivery (COD) or shop pickup.
-- All Pakistan: TCS / Leopards / Courier within 2-4 days.
-- Advance/COD Policy: Mention total estimate clearly.
+⭐ Products marked "Special Rate" are VIP/custom rates for THIS customer. Always quote these.
 
 ==================================================
-4. HANDLING DISCOUNTS & BARGAINING (MOLE TOL)
+5. DELIVERY & PAYMENT
 ==================================================
-- If customer asks for discount ("Kuch kam karo", "Discount milega?", "Final price?"):
-  - Polite answer: "Bhai yeh humari sub se reasonable aur final wholesale rates hain, quality A1 milegi. Agar aap bulk quantity lein ge toh management se baat karke best package de dein ge."
+- Sargodha City: Same-day/Next-day COD or shop pickup.
+- All Pakistan: TCS / Leopards within 2-4 days.
 
 ==================================================
-5. ORDER CLOSING & ESCALATION
+6. DISCOUNT HANDLING (MOLE TOL)
 ==================================================
-- When user shows buying interest ("Order kar do", "Pack kar do", "Bhej do"):
+If customer asks discount:
+"Bhai yeh final wholesale rates hain, quality A1 milegi. Bulk quantity pe management se best package de dein ge."
+
+==================================================
+7. ORDER CLOSING
+==================================================
+When user says "Order kar do" / "Pack kar do":
   1. Confirm item, quantity, total bill.
-  2. Request: Name (Naam), Full Address with landmark, Mobile Number.
-- Human Support Transfer: For bulk orders or special deals:
-  - Text: "Main aap ka number hamare sales manager ko pass kar raha hoon, woh aap se direct WhatsApp/Call par rabta kar lein ge."
+  2. Request: Naam, Poora Pata (with landmark), Mobile Number.
+
+Human Support Transfer (bulk/VIP):
+  - Text: "Main aap ka number sales manager ko pass kar raha hoon, woh direct rabta kar lein ge."
   - Voice: "میں آپ کا نمبر ہمارے سیلز مینیجر کو پاس کر رہا ہوں، وہ آپ سے ڈائریکٹ رابطہ کر لیں گے۔"
 `;
 }
 
 // ============================================================
-// VOICE NOTE GENERATION (Urdu TTS)
+// VOICE GENERATION
 // ============================================================
 async function generateNaturalAudio(text, outputPath) {
     const tts = new EdgeTTS({
@@ -228,43 +306,49 @@ async function generateNaturalAudio(text, outputPath) {
 }
 
 // ============================================================
-// REQUEST DETECTION HELPERS
+// DETECTION HELPERS
 // ============================================================
 function checkForTextRequest(text) {
     if (!text) return false;
     const lower = text.toLowerCase();
-    const keywords = [
-        'text', 'likh', 'likho', 'likha', 'likhna', 'likh kar', 'likh ke', 'likh do',
+    const keywords = ['text', 'likh', 'likho', 'likha', 'likhna', 'likh kar', 'likh ke', 'likh do',
         'message me', 'msg me', 'text me', 'rate list', 'ratelist', 'rates', 'list',
-        'detail', 'details', 'تکست', 'لکھ', 'ریٹ', 'لسٹ'
-    ];
+        'detail', 'details', 'تکست', 'لکھ', 'ریٹ', 'لسٹ'];
     return keywords.some(k => lower.includes(k));
 }
 
 function checkForVoiceRequest(text) {
     if (!text) return false;
     const lower = text.toLowerCase();
-    const keywords = [
-        'voice', 'vois', 'vn', 'voice note', 'voice me', 'voice main',
-        'bol ke', 'bol kar', 'bolen', 'bolo', 'batao voice', 'audio',
-        'آواز', 'وائس'
-    ];
+    const keywords = ['voice', 'vois', 'vn', 'voice note', 'voice me', 'voice main',
+        'bol ke', 'bol kar', 'bolen', 'bolo', 'batao voice', 'audio', 'آواز', 'وائس'];
     return keywords.some(k => lower.includes(k));
 }
 
 // ============================================================
-// COMMAND HANDLER (Owner Commands)
+// OWNER COMMAND HANDLER (Self-Chat Me Delete Nahi)
 // ============================================================
 async function handleOwnerCommand(sock, m, text, sender) {
     const cleanText = text.toLowerCase().trim();
 
-    // Delete owner command silently
+    // ✅ Detect: Owner apne "You" chat me hai?
+    const isSelfChat = (() => {
+        try {
+            const myNumber = cleanJidNumber(sock.user?.id || '');
+            const senderNumber = cleanJidNumber(sender);
+            return myNumber && senderNumber && myNumber === senderNumber;
+        } catch { return false; }
+    })();
+
+    // ✅ Sirf customer chats me command delete karo
     const deleteCommandMsg = async () => {
+        if (isSelfChat) return;
         try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) {}
     };
 
-    // Auto-delete bot reply after N seconds
+    // ✅ Sirf customer chats me reply auto-delete karo
     const autoDelete = async (sentMsg, delay = 5000) => {
+        if (isSelfChat) return;
         setTimeout(async () => {
             try { await sock.sendMessage(sender, { delete: sentMsg.key }); } catch (err) {}
         }, delay);
@@ -296,7 +380,10 @@ async function handleOwnerCommand(sock, m, text, sender) {
 
             await ratesCollection.updateOne(
                 { nickname },
-                { $set: { nickname, name: fullName, price } },
+                {
+                    $set: { nickname, name: fullName, price, updatedAt: new Date() },
+                    $setOnInsert: { createdAt: new Date() }
+                },
                 { upsert: true }
             );
 
@@ -308,9 +395,27 @@ async function handleOwnerCommand(sock, m, text, sender) {
             autoDelete(sentMsg, 6000);
         } else {
             const sentMsg = await sock.sendMessage(sender, {
-                text: `❌ *Format:* \`/addproduct nickname | Full Name | Price\`\n*Example:* \`/addproduct socket | 13A Multi Socket | 450\``
+                text: `❌ *Format:* \`/addproduct nickname | Full Name | Price\`\n*Example:* \`/addproduct usocket | Universal Socket (10A) | Qty batao\``
             });
             autoDelete(sentMsg, 8000);
+        }
+        return true;
+    }
+
+    // -------- /newlist --------
+    if (cleanText === '/newlist' || cleanText === '/newproducts') {
+        await deleteCommandMsg();
+        const recentText = await getRecentProducts(30);
+        if (!recentText) {
+            const sentMsg = await sock.sendMessage(sender, {
+                text: "ℹ️ Pichle 30 din me koi naya product add nahi hua."
+            });
+            autoDelete(sentMsg, 6000);
+        } else {
+            const sentMsg = await sock.sendMessage(sender, {
+                text: `🆕 *Recently Added Products (Last 30 Days):*\n\n${recentText}`
+            });
+            autoDelete(sentMsg, 25000);
         }
         return true;
     }
@@ -321,13 +426,25 @@ async function handleOwnerCommand(sock, m, text, sender) {
         const parts = text.split(' ').filter(p => p.trim().length > 0);
 
         if (parts.length >= 4) {
-            const customerId = cleanJidNumber(parts[1]);
+            const rawCustomer = parts[1];
+            const customerId = normalizePhone(rawCustomer);
             const nickname = parts[2].toLowerCase();
             const rateValue = parts.slice(3).join(' ').trim();
 
             if (['cancel', 'reset', 'delete'].includes(rateValue.toLowerCase())) {
-                await customRatesCollection.deleteOne({ customerId, nickname });
-                delete chatHistories[`${customerId}@s.whatsapp.net`];
+                await customRatesCollection.deleteMany({
+                    $or: [
+                        { customerId },
+                        { customerId: rawCustomer },
+                        { customerId: `+${customerId}` },
+                        { customerId: `0${customerId.slice(2)}` }
+                    ],
+                    nickname
+                });
+
+                Object.keys(chatHistories).forEach(k => {
+                    if (cleanJidNumber(k) === customerId) delete chatHistories[k];
+                });
 
                 const sentMsg = await sock.sendMessage(sender, {
                     text: `✅ *Custom Rate Cancelled!*\n👤 *Customer:* \`${customerId}\`\n📦 *Product:* \`${nickname}\`\nℹ️ Ab normal rates show honge.`
@@ -335,21 +452,28 @@ async function handleOwnerCommand(sock, m, text, sender) {
                 autoDelete(sentMsg, 6000);
             } else {
                 const formattedPrice = rateValue.toLowerCase().includes('rs') ? rateValue : `Rs. ${rateValue}`;
+
                 await customRatesCollection.updateOne(
                     { customerId, nickname },
-                    { $set: { customerId, nickname, price: formattedPrice, updatedAt: new Date() } },
+                    {
+                        $set: { customerId, nickname, price: formattedPrice, updatedAt: new Date() },
+                        $setOnInsert: { createdAt: new Date() }
+                    },
                     { upsert: true }
                 );
-                delete chatHistories[`${customerId}@s.whatsapp.net`];
+
+                Object.keys(chatHistories).forEach(k => {
+                    if (cleanJidNumber(k) === customerId) delete chatHistories[k];
+                });
 
                 const sentMsg = await sock.sendMessage(sender, {
-                    text: `✅ *Custom Rate Set!*\n👤 *Customer:* \`${customerId}\`\n📦 *Product:* \`${nickname}\`\n🏷️ *Special Rate:* ${formattedPrice}`
+                    text: `✅ *Custom Rate Set!*\n👤 *Customer:* \`${customerId}\`\n📦 *Product:* \`${nickname}\`\n🏷️ *Special Rate:* ${formattedPrice}\n\nℹ️ Ab jab yeh customer poochega, yeh rate hi batayega.`
                 });
-                autoDelete(sentMsg, 6000);
+                autoDelete(sentMsg, 7000);
             }
         } else {
             const sentMsg = await sock.sendMessage(sender, {
-                text: `❌ *Format:*\n• Set: \`/customrate 923001234567 wifi 1500\`\n• Cancel: \`/customrate 923001234567 wifi cancel\``
+                text: `❌ *Format:*\n• Set: \`/customrate 923001234567 wifi 4000\`\n• Cancel: \`/customrate 923001234567 wifi cancel\``
             });
             autoDelete(sentMsg, 8000);
         }
@@ -387,7 +511,10 @@ async function handleOwnerCommand(sock, m, text, sender) {
 
             await ratesCollection.updateOne(
                 { nickname },
-                { $set: { nickname, name: productName, price: priceFormatted } },
+                {
+                    $set: { nickname, name: productName, price: priceFormatted, updatedAt: new Date() },
+                    $setOnInsert: { createdAt: new Date() }
+                },
                 { upsert: true }
             );
 
@@ -399,7 +526,7 @@ async function handleOwnerCommand(sock, m, text, sender) {
             autoDelete(sentMsg, 5000);
         } else {
             const sentMsg = await sock.sendMessage(sender, {
-                text: `❌ *Format:* \`/rate wifi 2000\``
+                text: `❌ *Format:* \`/rate wifi 4500\``
             });
             autoDelete(sentMsg, 5000);
         }
@@ -419,7 +546,10 @@ async function handleOwnerCommand(sock, m, text, sender) {
 
             await ratesCollection.updateOne(
                 { nickname },
-                { $set: { nickname, name: newName, price: currentPrice } },
+                {
+                    $set: { nickname, name: newName, price: currentPrice, updatedAt: new Date() },
+                    $setOnInsert: { createdAt: new Date() }
+                },
                 { upsert: true }
             );
 
@@ -438,7 +568,7 @@ async function handleOwnerCommand(sock, m, text, sender) {
         return true;
     }
 
-    // -------- /list or /rates --------
+    // -------- /list --------
     if (['/list', '/rates', '/ratelist'].includes(cleanText)) {
         await deleteCommandMsg();
         const currentRatesText = await getDynamicProductsText();
@@ -446,6 +576,25 @@ async function handleOwnerCommand(sock, m, text, sender) {
             text: `📋 *Current Product & Rates:*\n\n${currentRatesText}`
         });
         autoDelete(sentMsg, 20000);
+        return true;
+    }
+
+    // -------- /seed --------
+    if (cleanText === '/seed') {
+        await deleteCommandMsg();
+        for (const key of Object.keys(defaultProducts)) {
+            await ratesCollection.updateOne(
+                { nickname: key },
+                {
+                    $set: { nickname: key, name: defaultProducts[key].name, price: defaultProducts[key].price, updatedAt: new Date() },
+                    $setOnInsert: { createdAt: new Date() }
+                },
+                { upsert: true }
+            );
+        }
+        Object.keys(chatHistories).forEach(k => delete chatHistories[k]);
+        const sentMsg = await sock.sendMessage(sender, { text: "✅ Default products seeded/updated successfully!" });
+        autoDelete(sentMsg, 5000);
         return true;
     }
 
@@ -482,7 +631,7 @@ async function handleGroupCommand(sock, m, text, sender) {
 }
 
 // ============================================================
-// MAIN BOT START FUNCTION
+// MAIN BOT START
 // ============================================================
 async function startBot() {
     if (isConnecting) return;
@@ -512,7 +661,6 @@ async function startBot() {
 
         sock.ev.on('creds.update', saveCreds);
 
-        // -------- Connection Update --------
         sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect, qr } = update;
 
@@ -542,14 +690,12 @@ async function startBot() {
             }
         });
 
-        // -------- Message Upsert Handler --------
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
             if (type !== 'notify') return;
 
             const m = messages[0];
             if (!m || !m.message) return;
 
-            // Duplicate check
             const msgId = m.key.id;
             if (processedMessages.has(msgId)) return;
             processedMessages.add(msgId);
@@ -561,9 +707,7 @@ async function startBot() {
             const isAudio = !!m.message.audioMessage;
             const text = (m.message.conversation || m.message.extendedTextMessage?.text || "").trim();
 
-            // ==========================================
             // GROUP HANDLING
-            // ==========================================
             if (isGroup) {
                 if (isFromMe) {
                     const handled = await handleGroupCommand(sock, m, text, sender);
@@ -572,29 +716,21 @@ async function startBot() {
                 if (!allowedGroups.has(sender)) return;
             }
 
-            // ==========================================
             // OWNER COMMANDS (Personal Chat Only)
-            // ==========================================
             if (isFromMe && text && !isGroup) {
                 const handled = await handleOwnerCommand(sock, m, text, sender);
                 if (handled) return;
                 return;
             }
 
-            // Skip if paused, empty, or self
             if (!isGroup && pausedChats.has(sender)) return;
             if (!isAudio && !text) return;
             if (isFromMe) return;
 
-            // Initialize history
             if (!chatHistories[sender]) chatHistories[sender] = [];
 
             try {
-                // ==========================================
-                // MODE DECISION: Voice or Text
-                // ==========================================
                 let sendAsVoice = false;
-
                 if (isAudio) {
                     sendAsVoice = true;
                 } else {
@@ -603,11 +739,7 @@ async function startBot() {
                     sendAsVoice = userWantsVoice && !userWantsText;
                 }
 
-                // ==========================================
-                // BUILD PROMPT PAYLOAD
-                // ==========================================
                 let promptPayload;
-
                 if (isAudio) {
                     const audioBuffer = await downloadMediaMessage(m, 'buffer', {});
                     const formatInstruction = `
@@ -615,6 +747,7 @@ async function startBot() {
 1. Customer ki voice note sun kar jawab do.
 2. Agar customer ne voice me "likh kar", "text me", "rate list", "list", "detail" maangi ho, toh Roman Urdu TEXT me reply do.
 3. Warna normal dialogue ke liye PURE URDU SCRIPT (اردو) me 2-3 sentences me jawab do.
+4. IMPORTANT: Product ka POORA naam use karo (jaise "Universal Socket (10A)", na ke sirf "Socket").
 `;
                     promptPayload = [
                         {
@@ -627,14 +760,11 @@ async function startBot() {
                     ];
                 } else {
                     const formatInstruction = sendAsVoice
-                        ? " [INSTRUCTION]: Jawab SIRF PURE URDU SCRIPT (اردو) me 2-3 complete sentences me do."
-                        : " [INSTRUCTION]: Jawab Roman Urdu (English alphabets) me do. Polite aur clear rakhna.";
+                        ? " [INSTRUCTION]: Jawab SIRF PURE URDU SCRIPT (اردو) me 2-3 complete sentences me do. Product ka POORA naam use karo."
+                        : " [INSTRUCTION]: Jawab Roman Urdu (English alphabets) me do. Polite aur clear rakhna. Product ka POORA naam use karo (jaise 'Universal Socket (10A)', 'Wi-Fi Touch Smart Switch').";
                     promptPayload = text + formatInstruction;
                 }
 
-                // ==========================================
-                // MEMORY MANAGEMENT (Last 10 messages)
-                // ==========================================
                 if (chatHistories[sender].length > 10) {
                     chatHistories[sender] = chatHistories[sender].slice(-10);
                 }
@@ -642,26 +772,27 @@ async function startBot() {
                     chatHistories[sender].shift();
                 }
 
-                // ==========================================
-                // AI MODEL FALLBACK LIST
-                // ==========================================
                 const modelsToTry = [
-                   "gemini-3.5-flash-lite",
+                    "gemini-3.5-flash-lite",
                     "gemini-3.5-flash",
                     "gemini-3.1-flash-lite",
                     "gemini-2.5-flash",
                     "gemini-flash-lite-latest",
                     "gemini-flash-latest"
-
                 ];
 
                 let responseText = null;
-                const currentRatesText = await getDynamicProductsText(sender);
-                const currentSystemPrompt = getSystemPrompt(currentRatesText);
 
-                // ==========================================
-                // GEMINI API CALL WITH FALLBACK
-                // ==========================================
+                const currentRatesText = await getDynamicProductsText(sender);
+                const recentProductsText = await getRecentProducts(30);
+
+                let fullProductsText = currentRatesText;
+                if (recentProductsText) {
+                    fullProductsText += `\n\n🆕 RECENTLY ADDED (Last 30 Days) — mention when customer asks "kya naya hai?":\n${recentProductsText}`;
+                }
+
+                const currentSystemPrompt = getSystemPrompt(fullProductsText);
+
                 for (const modelName of modelsToTry) {
                     try {
                         const model = genAI.getGenerativeModel({
@@ -681,21 +812,14 @@ async function startBot() {
                     }
                 }
 
-                // ==========================================
-                // SEND RESPONSE
-                // ==========================================
                 if (responseText) {
-                    // Save to memory
                     chatHistories[sender].push({ role: 'user', parts: [{ text: isAudio ? '[Voice Note]' : text }] });
                     chatHistories[sender].push({ role: 'model', parts: [{ text: responseText }] });
 
-                    // Check if response is Urdu script
                     const isUrduScript = /[\u0600-\u06FF]/.test(responseText);
 
-                    // If AI wrote a text-request answer in Roman Urdu, send as text
                     if (isAudio && checkForTextRequest(responseText)) sendAsVoice = false;
 
-                    // SEND VOICE NOTE
                     if (sendAsVoice && isUrduScript) {
                         const audioPath = path.join(__dirname, `reply_${Date.now()}.mp3`);
                         try {
@@ -716,7 +840,6 @@ async function startBot() {
                             if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
                         }
                     } else {
-                        // SEND TEXT
                         await sock.sendMessage(sender, { text: responseText }, { quoted: m });
                     }
                 }
@@ -733,7 +856,4 @@ async function startBot() {
     }
 }
 
-// ============================================================
-// START THE BOT
-// ============================================================
 startBot();
