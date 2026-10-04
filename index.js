@@ -1,17 +1,22 @@
+// Environment variables (.env file) load karne ke liye
 require('dotenv').config();
-const { default: makeWASocket, DisconnectReason, initAuthCreds, BufferJSON, downloadMediaMessage } = require('@whiskeysockets/baileys');
-const qrcode = require('qrcode-terminal');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-const express = require('express');
-const { MongoClient } = require('mongodb');
-const { EdgeTTS } = require('node-edge-tts');
-const fs = require('fs');
-const path = require('path');
 
+// WhatsApp Baileys library aur zaroori functions import karna
+const { default: makeWASocket, DisconnectReason, initAuthCreds, BufferJSON, downloadMediaMessage } = require('@whiskeysockets/baileys');
+const qrcode = require('qrcode-terminal'); // Terminal me QR code dikhane ke liye
+const { GoogleGenerativeAI } = require('@google/generative-ai'); // Gemini AI SDK
+const express = require('express'); // Web server ke liye (Render/Server hosting ke liye)
+const { MongoClient } = require('mongodb'); // MongoDB database connector
+const { EdgeTTS } = require('node-edge-tts'); // Text to Voice (Audio reply) ke liye
+const fs = require('fs'); // Temporary files delete/read karne ke liye
+const path = require('path'); // File path handle karne ke liye
+
+// DNS resolution fix (Network issues se bachne ke liye)
 const dns = require('node:dns');
 dns.setDefaultResultOrder('ipv4first');
 dns.setServers(['8.8.8.8', '8.8.4.4']);
 
+// Express App setup (Server Health Check)
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -27,6 +32,7 @@ app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
 });
 
+// Environment variables check karna (Gemini aur Mongo keys)
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const MONGO_URI = process.env.MONGO_URI;
 
@@ -35,11 +41,16 @@ if (!GEMINI_API_KEY || !MONGO_URI) {
     process.exit(1);
 }
 
+// Gemini AI client initialize karna
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-const pausedChats = new Set();
-const chatHistories = {};
-const processedMessages = new Set();
 
+// Bot ke State & Storage Variables
+const pausedChats = new Set(); // Jin chats me bot off kiya gaya ho
+const allowedGroups = new Set(); // Active groups ka record (Default me sab blocked hote hain)
+const chatHistories = {}; // Customer chat history memory
+const processedMessages = new Set(); // Duplicate messages handle na hone dene ke liye
+
+// Default Product Rates (Agar Database khali ho toh yeh use hongay)
 const defaultProducts = {
     'normal-switch': { name: 'Standard / Normal Electric Switch & Socket', price: 'Rs. 150 - Rs. 350 per piece' },
     'wifi-switch': { name: 'Wi-Fi Touch Smart Switch (App & Voice Control)', price: 'Rs. 1,800 - Rs. 3,500 per piece' },
@@ -51,6 +62,7 @@ let mongoClient = null;
 let isConnecting = false;
 let ratesCollection = null;
 
+// MongoDB me WhatsApp Auth Session save aur read karne ka function
 async function useMongoDBAuthState(collection) {
     const writeData = (data, id) => {
         return collection.replaceOne(
@@ -105,6 +117,7 @@ async function useMongoDBAuthState(collection) {
     };
 }
 
+// Database se updated rates fetch karke prompt ke liye formatting karne ka function
 async function getDynamicProductsText() {
     try {
         let products = await ratesCollection.find({}).toArray();
@@ -121,7 +134,7 @@ async function getDynamicProductsText() {
 
         let productStr = "";
         products.forEach(p => {
-            productStr += `- ${p.name}: ${p.price}\n`;
+            productStr += `- ${p.name}:${p.price}\n`;
         });
         return productStr;
     } catch (e) {
@@ -130,6 +143,7 @@ async function getDynamicProductsText() {
     }
 }
 
+// AI (Gemini) ka System Prompt: Shop Executive ki personality aur rules define karta hai
 function getSystemPrompt(productsListText) {
     return `
 You are an experienced, sharp, and polite Sales Executive for "Arain Bros, Inc." (Electric & Smart Switch Store) based in Sargodha, Punjab, Pakistan. You are handling customer chats on WhatsApp.
@@ -187,16 +201,18 @@ Delivery & Payment Terms (Pakistani Market Standards):
 `;
 }
 
+// Urdu Text se Voice Note generate karne ka function (EdgeTTS)
 async function generateNaturalAudio(text, outputPath) {
     const tts = new EdgeTTS({
-        voice: 'ur-PK-AsadNeural',
+        voice: 'ur-PK-AsadNeural', // Natural Pakistani Urdu Voice
         lang: 'ur-PK',
-        outputFormat: 'ogg-24khz-16bit-mono-opus'
+        outputFormat: 'ogg-24khz-16bit-mono-opus' // WhatsApp audio format
     });
     await tts.ttsPromise(text, outputPath);
     return outputPath;
 }
 
+// Check karta hai ke customer ne text reply ki khwahish ki hai ya nahi
 function checkForTextRequest(text) {
     if (!text) return false;
     const lower = text.toLowerCase();
@@ -208,6 +224,7 @@ function checkForTextRequest(text) {
     return textKeywords.some(keyword => lower.includes(keyword));
 }
 
+// Check karta hai ke customer ne voice note maanga hai ya nahi
 function checkForVoiceRequest(text) {
     if (!text) return false;
     const lower = text.toLowerCase();
@@ -215,11 +232,13 @@ function checkForVoiceRequest(text) {
     return voiceKeywords.some(keyword => lower.includes(keyword));
 }
 
+// Main Bot Start Function
 async function startBot() {
     if (isConnecting) return;
     isConnecting = true;
 
     try {
+        // MongoDB Connection Establish karna
         if (!mongoClient) {
             mongoClient = new MongoClient(MONGO_URI);
             await mongoClient.connect();
@@ -231,6 +250,7 @@ async function startBot() {
 
         const { state, saveCreds } = await useMongoDBAuthState(collection);
 
+        // WhatsApp Socket Creation (Baileys)
         const sock = makeWASocket({
             auth: state,
             printQRInTerminal: false,
@@ -242,6 +262,7 @@ async function startBot() {
 
         sock.ev.on('creds.update', saveCreds);
 
+        // Connection Status Event (QR, Open, Disconnect)
         sock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect, qr } = update;
 
@@ -271,12 +292,14 @@ async function startBot() {
             }
         });
 
+        // Naye Aaye Hue Messages ko Handle Karne Ka Event Listener
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
             if (type !== 'notify') return;
 
             const m = messages[0];
             if (!m || !m.message) return;
 
+            // Duplicate message processing se bachne ke liye ID track
             const msgId = m.key.id;
             if (processedMessages.has(msgId)) return;
             processedMessages.add(msgId);
@@ -286,87 +309,133 @@ async function startBot() {
             }
 
             const sender = m.key.remoteJid;
-            const isFromMe = m.key.fromMe;
-            const isAudio = !!m.message.audioMessage;
+            const isGroup = sender.endsWith('@g.us'); // Group chat verify
+            const isFromMe = m.key.fromMe; // Owner ka message check
+            const isAudio = !!m.message.audioMessage; // Voice note check
             const text = (m.message.conversation || m.message.extendedTextMessage?.text || "").trim();
 
-            // OWNER COMMANDS HANDLING
+            // ==========================================
+            // 🟢 1. GROUP CONTROLS (100% Silent Mode)
+            // ==========================================
+            if (isGroup) {
+                const cleanGroupText = text.toLowerCase();
+
+                // Group mein Bot ON karne ki command
+                if (isFromMe && cleanGroupText === 'groupchaton') {
+                    allowedGroups.add(sender);
+
+                    // Command message ko quietly Delete for Everyone karna
+                    try {
+                        await sock.sendMessage(sender, {
+                            delete: {
+                                remoteJid: sender,
+                                fromMe: true,
+                                id: m.key.id,
+                                participant: m.key.participant
+                            }
+                        });
+                    } catch (e) {
+                        console.error("Group command message delete error:", e);
+                    }
+
+                    return; // Bilkul khamoshi se return (kisi ko pata nahi chalega)
+                }
+
+                // Group mein Bot OFF karne ki command
+                if (isFromMe && (cleanGroupText === 'groupchatoff' || cleanGroupText === 'off' || cleanGroupText === 'stop')) {
+                    allowedGroups.delete(sender);
+
+                    // Command message ko quietly Delete for Everyone karna
+                    try {
+                        await sock.sendMessage(sender, {
+                            delete: {
+                                remoteJid: sender,
+                                fromMe: true,
+                                id: m.key.id,
+                                participant: m.key.participant
+                            }
+                        });
+                    } catch (e) {
+                        console.error("Group command message delete error:", e);
+                    }
+
+                    return; // Quiet return
+                }
+
+                // DEFAULT: Agar group allowed list mein nahi hai toh bot silent rahega
+                if (!allowedGroups.has(sender)) {
+                    return;
+                }
+            }
+
+            // ==========================================
+            // 🟢 2. OWNER COMMANDS (Personal Chat)
+            // ==========================================
             if (isFromMe && text) {
                 const cleanText = text.toLowerCase();
 
-                // Bot Control Commands
-                if (cleanText === 'off') {
+                // Off / Stop Command: Bot Pause kar deta hai
+                if (cleanText === 'off' || cleanText === 'stop') {
                     pausedChats.add(sender);
                     try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) { }
                     return;
                 }
-                if (cleanText === 'start') {
+                // Start / On Command: Bot Resume kar deta hai
+                if (cleanText === 'start' || cleanText === 'on') {
                     pausedChats.delete(sender);
                     chatHistories[sender] = [];
                     try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) { }
                     return;
                 }
 
-                // Rate Change Command
-                // Rate Change Command
-if (text.startsWith('/ratechange')) {
-    try {
-        await sock.sendMessage(sender, { delete: m.key });
-    } catch (err) {
-        console.error("Could not delete command message:", err);
-    }
+                // Rates Update karne ki Owner Command (/ratechange nickname price)
+                if (text.startsWith('/ratechange')) {
+                    try { await sock.sendMessage(sender, { delete: m.key }); } catch (err) { }
 
-    const parts = text.split(' ');
-    if (parts.length >= 3) {
-        const nickname = parts[1].toLowerCase();
-        const newPrice = parts.slice(2).join(' ');
+                    const parts = text.split(' ');
+                    if (parts.length >= 3) {
+                        const nickname = parts[1].toLowerCase();
+                        const newPrice = parts.slice(2).join(' ');
 
-        let productName = defaultProducts[nickname]?.name || nickname;
+                        let productName = defaultProducts[nickname]?.name || nickname;
 
-        const existingDoc = await ratesCollection.findOne({ nickname });
-        if (existingDoc && existingDoc.name) {
-            productName = existingDoc.name;
-        }
+                        const existingDoc = await ratesCollection.findOne({ nickname });
+                        if (existingDoc && existingDoc.name) {
+                            productName = existingDoc.name;
+                        }
 
-        const priceFormatted = newPrice.toLowerCase().includes('rs') ? newPrice : `Rs. ${newPrice}`;
+                        const priceFormatted = newPrice.toLowerCase().includes('rs') ? newPrice : `Rs. ${newPrice}`;
 
-        await ratesCollection.updateOne(
-            { nickname: nickname },
-            { $set: { nickname: nickname, name: productName, price: priceFormatted } },
-            { upsert: true }
-        );
+                        await ratesCollection.updateOne(
+                            { nickname: nickname },
+                            { $set: { nickname: nickname, name: productName, price: priceFormatted } },
+                            { upsert: true }
+                        );
 
-        // 🟢 FIX: Rate change hotay hi saari purani memory clear kar dein
-        Object.keys(chatHistories).forEach(key => delete chatHistories[key]);
+                        // Dynamic rates change ke baad history reset
+                        Object.keys(chatHistories).forEach(key => delete chatHistories[key]);
 
-        const sentMsg = await sock.sendMessage(sender, {
-            text: `✅ *Rate Updated Successfully!*\n\n📦 *Product:* ${productName}\n🏷️ *New Rate:* ${priceFormatted}`
-        });
+                        const sentMsg = await sock.sendMessage(sender, {
+                            text: `✅ *Rate Updated Successfully!*\n\n📦 *Product:* ${productName}\n🏷️ *New Rate:* ${priceFormatted}`
+                        });
 
-        setTimeout(async () => {
-            try {
-                await sock.sendMessage(sender, { delete: sentMsg.key });
-            } catch (err) {
-                console.error("Could not auto-delete rate status message:", err);
-            }
-        }, 5000);
+                        setTimeout(async () => {
+                            try { await sock.sendMessage(sender, { delete: sentMsg.key }); } catch (err) { }
+                        }, 5000);
 
-    } else {
-        const sentMsg = await sock.sendMessage(sender, {
-            text: `❌ *Invalid Format!*\nUse: \`/ratechange wifi-switch 2000\`\nAvailable Nicknames:\n- \`wifi-switch\`\n- \`normal-switch\`\n- \`board\`\n- \`breaker\``
-        });
+                    } else {
+                        const sentMsg = await sock.sendMessage(sender, {
+                            text: `❌ *Invalid Format!*\nUse: \`/ratechange wifi-switch 2000\`\nAvailable Nicknames:\n- \`wifi-switch\`\n- \`normal-switch\`\n- \`board\`\n- \`breaker\``
+                        });
 
-        setTimeout(async () => {
-            try {
-                await sock.sendMessage(sender, { delete: sentMsg.key });
-            } catch (err) {
-                console.error("Could not auto-delete error status message:", err);
-            }
-        }, 5000);
-    }
-    return;
-}
+                        setTimeout(async () => {
+                            try { await sock.sendMessage(sender, { delete: sentMsg.key }); } catch (err) { }
+                        }, 5000);
+                    }
+                    return;
+                }
 
+                // Current Rate list dekhne ki Command
                 if (cleanText === '/ratelist') {
                     try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) { }
                     const currentRatesText = await getDynamicProductsText();
@@ -377,14 +446,18 @@ if (text.startsWith('/ratechange')) {
                 return;
             }
 
-            if (pausedChats.has(sender)) return;
+            // Checks: Paused Chat ignore karo, Empty message ignore karo, Self message ignore karo
+            if (!isGroup && pausedChats.has(sender)) return;
             if (!isAudio && !text) return;
+            if (isFromMe) return;
 
+            // Chat Memory array initialize
             if (!chatHistories[sender]) chatHistories[sender] = [];
 
             try {
                 let sendAsVoice = false;
 
+                // Reply Mode Decision (Voice Note bhejna hai ya Text)
                 if (isAudio) {
                     sendAsVoice = true;
                 } else {
@@ -399,6 +472,7 @@ if (text.startsWith('/ratechange')) {
 
                 let promptPayload;
 
+                // Input Message Formatting Gemini ke liye
                 if (isAudio) {
                     const audioBuffer = await downloadMediaMessage(m, 'buffer', {});
                     const formatInstruction = `
@@ -423,6 +497,7 @@ if (text.startsWith('/ratechange')) {
                     promptPayload = text + formatInstruction;
                 }
 
+                // Memory Management: Last 10 messages retain rakhna
                 if (chatHistories[sender].length > 10) {
                     chatHistories[sender] = chatHistories[sender].slice(-10);
                 }
@@ -431,6 +506,7 @@ if (text.startsWith('/ratechange')) {
                     chatHistories[sender].shift();
                 }
 
+                // Fallback Models List (Agar aik model rate limit ho jaye toh doosra auto handle kare)
                 const modelsToTry = [
                     "gemini-3.5-flash-lite",
                     "gemini-3.5-flash",
@@ -445,6 +521,7 @@ if (text.startsWith('/ratechange')) {
                 const currentRatesText = await getDynamicProductsText();
                 const currentSystemPrompt = getSystemPrompt(currentRatesText);
 
+                // Gemini AI API Call with Fallback Loop
                 for (const modelName of modelsToTry) {
                     try {
                         const model = genAI.getGenerativeModel({
@@ -470,7 +547,9 @@ if (text.startsWith('/ratechange')) {
                     }
                 }
 
+                // Response Processing & Sending to WhatsApp
                 if (responseText) {
+                    // Chat memory me record add karna
                     chatHistories[sender].push({ role: 'user', parts: [{ text: isAudio ? '[Voice Note Input]' : text }] });
                     chatHistories[sender].push({ role: 'model', parts: [{ text: responseText }] });
 
@@ -480,28 +559,30 @@ if (text.startsWith('/ratechange')) {
                         sendAsVoice = false;
                     }
 
+                    // Voice Note Bhejna (Agar Urdu text aur Voice mode ho)
                     if (sendAsVoice && isUrduScript) {
                         const audioPath = path.join(__dirname, `reply_${Date.now()}.mp3`);
                         try {
                             await generateNaturalAudio(responseText, audioPath);
                             const audioBuffer = fs.readFileSync(audioPath);
 
-                            // FIXED MIME TYPE & PTT ATTRIBUTES FOR WHATSAPP VOICE NOTES
                             await sock.sendMessage(sender, {
                                 audio: audioBuffer,
                                 mimetype: 'audio/ogg; codecs=opus',
-                                ptt: true
+                                ptt: true // Push to Talk (Green Voice Note badge)
                             }, { quoted: m });
 
                         } catch (audioErr) {
                             console.error("Voice Generation Error, falling back to text:", audioErr);
                             await sock.sendMessage(sender, { text: responseText }, { quoted: m });
                         } finally {
+                            // Temporary audio file delete karna
                             if (fs.existsSync(audioPath)) {
                                 fs.unlinkSync(audioPath);
                             }
                         }
                     } else {
+                        // Text Reply Bhejna
                         await sock.sendMessage(sender, { text: responseText }, { quoted: m });
                     }
                 }
@@ -518,4 +599,5 @@ if (text.startsWith('/ratechange')) {
     }
 }
 
+// Bot ko start karne ka final call
 startBot();
