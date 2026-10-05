@@ -1,6 +1,6 @@
 // ============================================================
-// ARRAIN BROS INC. - WhatsApp AI Sales Executive Bot (v3.2 FINAL)
-// Manual Self-Chat Protection + All Features + Debug Logs
+// ARRAIN BROS INC. - WhatsApp AI Sales Executive Bot (v3.4)
+// PC/Web Compatible + Mobile + All Features + Debug Logs
 // ============================================================
 
 require('dotenv').config();
@@ -120,8 +120,11 @@ async function useMongoDBAuthState(collection) {
 // ============================================================
 function cleanJidNumber(rawJid) {
     if (!rawJid) return '';
-    let num = rawJid.split('@')[0];
+    // Remove @domain
+    let num = String(rawJid).split('@')[0];
+    // Remove :device suffix (like :12)
     num = num.split(':')[0];
+    // Remove all non-digits
     num = num.replace(/\D/g, '');
     return num;
 }
@@ -135,7 +138,7 @@ function normalizePhone(raw) {
 }
 
 // ============================================================
-// ✅ STRONG SELF-CHAT DETECTOR (Multi-Layer)
+// ✅ STRONG SELF-CHAT DETECTOR (PC/Web + Mobile Compatible)
 // ============================================================
 function detectSelfChat(sock, sender, ownerNumber) {
     const senderClean = cleanJidNumber(sender);
@@ -152,56 +155,62 @@ function detectSelfChat(sock, sender, ownerNumber) {
     console.log(`      my:     clean="${myClean}" norm="${myNorm}"`);
     console.log(`      owner:  raw="${ownerNumber || 'NULL'}" clean="${ownerClean}" norm="${ownerNorm}"`);
 
-    // Method 1: Sender matches bot's own number (fromMe self-chat)
+    // Match 1: sender == bot number (direct)
     if (myClean && senderClean && myClean === senderClean) {
-        console.log(`      ✅ Match 1: sender == myNumber (sock.user.id)`);
+        console.log(`      ✅ Match 1: sender == bot number`);
         return true;
     }
 
-    // Method 2: Sender matches bot's own number (normalized)
+    // Match 2: sender == bot number (normalized)
     if (myNorm && senderNorm && myNorm === senderNorm) {
-        console.log(`      ✅ Match 2: sender == myNumber (normalized)`);
+        console.log(`      ✅ Match 2: sender == bot (normalized)`);
         return true;
     }
 
-    // Method 3: Owner's saved number matches sender
+    // Match 3: sender == owner number (direct)
     if (ownerClean && senderClean && ownerClean === senderClean) {
-        console.log(`      ✅ Match 3: sender == ownerNumber`);
+        console.log(`      ✅ Match 3: sender == owner number`);
         return true;
     }
 
-    // Method 4: Owner's saved number matches sender (normalized)
+    // Match 4: sender == owner number (normalized)
     if (ownerNorm && senderNorm && ownerNorm === senderNorm) {
-        console.log(`      ✅ Match 4: sender == ownerNumber (normalized)`);
+        console.log(`      ✅ Match 4: sender == owner (normalized)`);
         return true;
     }
 
-    // Method 5: Any of owner's variants match sender's variants
-    if (ownerNumber) {
-        const variants = [
-            ownerClean,
-            ownerNorm,
-            `+${ownerNorm}`,
-            `0${ownerNorm.slice(2)}`,
-            `92${ownerNorm.slice(2)}`
-        ];
-        const senderVariants = [
-            senderClean,
-            senderNorm,
-            `+${senderNorm}`,
-            `0${senderNorm.slice(2)}`,
-            `92${senderNorm.slice(2)}`
-        ];
-        const match = variants.some(v => v && senderVariants.includes(v));
-        if (match) {
-            console.log(`      ✅ Match 5: variant match`);
+    // Match 5: Last 10 digits comparison (handles all formats)
+    if (senderClean.length >= 10) {
+        const senderLast10 = senderClean.slice(-10);
+        if (ownerClean.length >= 10 && senderLast10 === ownerClean.slice(-10)) {
+            console.log(`      ✅ Match 5a: last 10 digits (owner)`);
+            return true;
+        }
+        if (myClean.length >= 10 && senderLast10 === myClean.slice(-10)) {
+            console.log(`      ✅ Match 5b: last 10 digits (bot)`);
             return true;
         }
     }
 
-    // Method 6: @lid format (fallback — agar owner number saved hai)
-    if (sender.includes('@lid') && ownerNumber && ownerNorm && ownerNorm.length >= 10) {
-        console.log(`      ⚠️  Match 6: @lid format + ownerNumber saved → treating as self-chat`);
+    // Match 6: Variant matching
+    if (ownerNumber) {
+        const ownerVariants = [
+            ownerClean, ownerNorm,
+            `+${ownerNorm}`, `0${ownerNorm.slice(2)}`, `92${ownerNorm.slice(2)}`
+        ];
+        const senderVariants = [
+            senderClean, senderNorm,
+            `+${senderNorm}`, `0${senderNorm.slice(2)}`, `92${senderNorm.slice(2)}`
+        ];
+        if (ownerVariants.some(v => v && senderVariants.includes(v))) {
+            console.log(`      ✅ Match 6: variant match`);
+            return true;
+        }
+    }
+
+    // Match 7: @lid format (PC/Web pe bahut common)
+    if (sender.includes('@lid')) {
+        console.log(`      ✅ Match 7: @lid format — self-chat`);
         return true;
     }
 
@@ -286,7 +295,7 @@ async function getRecentProducts(days = 30) {
         let out = "";
         recent.forEach(p => {
             const dateStr = p.createdAt
-                ? new Date(p.createdAt).toLocaleDateString('en-PK')
+                ? new Date(p.createdAt).toLocaleDateString('en-GB')
                 : 'Recently added';
             out += `🆕 *${p.name}* (\`${p.nickname}\`)\n   🏷️ ${p.price}\n   📅 ${dateStr}\n\n`;
         });
@@ -407,19 +416,16 @@ function checkForVoiceRequest(text) {
 async function handleOwnerCommand(sock, m, text, sender) {
     const cleanText = text.toLowerCase().trim();
 
-    // ✅ STRONG self-chat detection
     console.log(`\n🔍 [Owner Command Received]`);
     console.log(`   text: "${text}"`);
     const isSelfChat = detectSelfChat(sock, sender, ownerSelfNumber);
     console.log(`   🎯 isSelfChat = ${isSelfChat}\n`);
 
-    // Command delete: sirf customer chats me
     const deleteCommandMsg = async () => {
         if (isSelfChat) return;
         try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) {}
     };
 
-    // Bot reply auto-delete: sirf customer chats me
     const autoDelete = async (sentMsg, delay = 5000) => {
         if (isSelfChat) return;
         setTimeout(async () => {
@@ -647,7 +653,7 @@ async function handleOwnerCommand(sock, m, text, sender) {
     }
 
     // -------- /rate --------
-    if (text.startsWith('/rate')) {
+    if (text.startsWith('/rate') && !text.startsWith('/ratelist')) {
         await deleteCommandMsg();
         const parts = text.split(' ');
         if (parts.length >= 3) {
@@ -719,7 +725,7 @@ async function handleOwnerCommand(sock, m, text, sender) {
         return true;
     }
 
-    // -------- /list --------
+    // -------- /list /rates /ratelist --------
     if (['/list', '/rates', '/ratelist'].includes(cleanText)) {
         await deleteCommandMsg();
         const currentRatesText = await getDynamicProductsText();
@@ -863,6 +869,9 @@ async function startBot() {
             }
         });
 
+        // ============================================================
+        // ✅ UPDATED MESSAGE HANDLER (PC/Web + Mobile Compatible)
+        // ============================================================
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
             if (type !== 'notify') return;
 
@@ -874,33 +883,44 @@ async function startBot() {
             processedMessages.add(msgId);
             if (processedMessages.size > 1000) processedMessages.clear();
 
-            const sender = m.key.remoteJid;
-            const isGroup = sender.endsWith('@g.us');
-            const isFromMe = m.key.fromMe;
+            // ✅ PC/Web friendly: use remoteJid consistently
+            const remoteJid = m.key.remoteJid || '';
+            const isGroup = remoteJid.endsWith('@g.us');
+            const isFromMe = !!m.key.fromMe;
             const isAudio = !!m.message.audioMessage;
             const text = (m.message.conversation || m.message.extendedTextMessage?.text || "").trim();
+
+            // ✅ Debug log for every message
+            console.log(`\n📨 [Message]`);
+            console.log(`   remoteJid: "${remoteJid}"`);
+            console.log(`   participant: "${m.key.participant || 'N/A'}"`);
+            console.log(`   isFromMe: ${isFromMe} | isGroup: ${isGroup} | isAudio: ${isAudio}`);
+            console.log(`   text: "${text}"`);
 
             // GROUP HANDLING
             if (isGroup) {
                 if (isFromMe) {
-                    const handled = await handleGroupCommand(sock, m, text, sender);
+                    const handled = await handleGroupCommand(sock, m, text, remoteJid);
                     if (handled) return;
                 }
-                if (!allowedGroups.has(sender)) return;
+                if (!allowedGroups.has(remoteJid)) return;
             }
 
-            // OWNER COMMANDS
+            // OWNER COMMANDS (PC/Web compatible)
             if (isFromMe && text && !isGroup) {
-                const handled = await handleOwnerCommand(sock, m, text, sender);
+                const handled = await handleOwnerCommand(sock, m, text, remoteJid);
                 if (handled) return;
                 return;
             }
 
-            if (!isGroup && pausedChats.has(sender)) return;
+            if (!isGroup && pausedChats.has(remoteJid)) return;
             if (!isAudio && !text) return;
             if (isFromMe) return;
 
-            if (!chatHistories[sender]) chatHistories[sender] = [];
+            // Use remoteJid as chat key
+            const chatKey = remoteJid;
+
+            if (!chatHistories[chatKey]) chatHistories[chatKey] = [];
 
             try {
                 let sendAsVoice = false;
@@ -938,13 +958,14 @@ async function startBot() {
                     promptPayload = text + formatInstruction;
                 }
 
-                if (chatHistories[sender].length > 10) {
-                    chatHistories[sender] = chatHistories[sender].slice(-10);
+                if (chatHistories[chatKey].length > 10) {
+                    chatHistories[chatKey] = chatHistories[chatKey].slice(-10);
                 }
-                while (chatHistories[sender].length > 0 && chatHistories[sender][0].role !== 'user') {
-                    chatHistories[sender].shift();
+                while (chatHistories[chatKey].length > 0 && chatHistories[chatKey][0].role !== 'user') {
+                    chatHistories[chatKey].shift();
                 }
 
+                // Working Gemini models
                 const modelsToTry = [
                     "gemini-3.5-flash-lite",
                     "gemini-3.5-flash",
@@ -956,7 +977,7 @@ async function startBot() {
 
                 let responseText = null;
 
-                const currentRatesText = await getDynamicProductsText(sender);
+                const currentRatesText = await getDynamicProductsText(chatKey);
                 const recentProductsText = await getRecentProducts(30);
 
                 let fullProductsText = currentRatesText;
@@ -974,7 +995,7 @@ async function startBot() {
                             generationConfig: { maxOutputTokens: 500 }
                         });
 
-                        const chat = model.startChat({ history: chatHistories[sender] });
+                        const chat = model.startChat({ history: chatHistories[chatKey] });
                         const result = await chat.sendMessage(promptPayload);
                         responseText = result.response.text().trim();
                         console.log(`✅ AI responded using: ${modelName}`);
@@ -986,8 +1007,8 @@ async function startBot() {
                 }
 
                 if (responseText) {
-                    chatHistories[sender].push({ role: 'user', parts: [{ text: isAudio ? '[Voice Note]' : text }] });
-                    chatHistories[sender].push({ role: 'model', parts: [{ text: responseText }] });
+                    chatHistories[chatKey].push({ role: 'user', parts: [{ text: isAudio ? '[Voice Note]' : text }] });
+                    chatHistories[chatKey].push({ role: 'model', parts: [{ text: responseText }] });
 
                     const isUrduScript = /[\u0600-\u06FF]/.test(responseText);
 
@@ -999,21 +1020,21 @@ async function startBot() {
                             await generateNaturalAudio(responseText, audioPath);
                             const audioBuffer = fs.readFileSync(audioPath);
 
-                            await sock.sendMessage(sender, {
+                            await sock.sendMessage(chatKey, {
                                 audio: audioBuffer,
                                 mimetype: 'audio/ogg; codecs=opus',
                                 ptt: true
                             }, { quoted: m });
 
-                            console.log(`🎙️ Voice note sent to ${sender}`);
+                            console.log(`🎙️ Voice note sent to ${chatKey}`);
                         } catch (audioErr) {
                             console.error("Voice generation failed, sending text:", audioErr);
-                            await sock.sendMessage(sender, { text: responseText }, { quoted: m });
+                            await sock.sendMessage(chatKey, { text: responseText }, { quoted: m });
                         } finally {
                             if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
                         }
                     } else {
-                        await sock.sendMessage(sender, { text: responseText }, { quoted: m });
+                        await sock.sendMessage(chatKey, { text: responseText }, { quoted: m });
                     }
                 }
 
