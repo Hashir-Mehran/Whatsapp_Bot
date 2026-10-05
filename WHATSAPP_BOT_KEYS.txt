@@ -1,34 +1,74 @@
-🔑 Bot Me Use Hone Wali SAARI "/" Commands (Keys)
-Achha bhai, samajh gaya! Aap slash (/) wali commands ki baat kar rahe hain — jo bot me type karke use hoti hain. Yeh rahi poori list ek jagah:
+🔑 ARAIN BROS BOT — Complete Commands Guide
+(WhatsApp AI Sales Executive Bot)
+📱 Bot Kaise Setup Karein (Pehli Baar)
+Step 1: Apna "You" Chat Set Karein (Zaroori!)
+Bot ko start karne ke baad, apne WhatsApp ke "Message Yourself" chat me jayein aur yeh command bhejein:
 
-📋 Complete Commands List (Saari / Wali Keys)
-👤 1. Owner Commands — Apne "You" Chat Me
-(Yahan kuch bhi delete nahi hoga — sab visible rahega)
+text
+/selfchat 923001234567
+⚠️ 923001234567 ki jagah apna asli WhatsApp number daalein (country code 92 ke saath, + ke bina).
+
+Confirmation reply aayegi:
+
+text
+✅ Self-Chat Protection SET!
+
+👤 Number: `923001234567`
+
+ℹ️ Ab is number ki "You" chat me kuch bhi delete NAHI hoga.
+Ab aap apne "You" chat me bilkul chain se commands use kar sakte hain — kuch bhi delete nahi hoga!
+
+📋 Saari Commands — Complete List
+👤 PART 1: Owner Commands — Apne "You" Chat Me
+(Yahan kuch bhi delete NAHI hoga — sab visible rahega)
 
 #	Command	Format	Kaam
-1	/list	/list	Poori rate list dekho
-2	/rates	/rates	Same as /list (alias)
-3	/ratelist	/ratelist	Same as /list (alias)
-4	/newlist	/newlist	Last 30 din ke naye products
-5	/newproducts	/newproducts	Same as /newlist (alias)
-6	/addproduct	/addproduct key | Full Name | Price	Naya product add karo
-7	/rate	/rate key newprice	Kisi product ka rate update karo
-8	/rename	/rename key New Full Name	Product ka naam badlo
-9	/customrate	/customrate 923001234567 key price	VIP special rate set karo
-10	/customrate	/customrate 923001234567 key cancel	VIP rate hataao
-11	/customlist	/customlist	Saare VIP rates dekho
-12	/seed	/seed	Default rates DB me reset karo
-🟢 2. Non-Slash Commands (Owner)
+1	/selfchat	/selfchat 923001234567	Apna "You" number set karo (delete protection)
+2	/selfchat show	/selfchat show	Current saved number dekho
+3	/selfchat cancel	/selfchat cancel	Protection hataao
+4	/list	/list	Poori rate list dekho
+5	/rates	/rates	Same as /list
+6	/ratelist	/ratelist	Same as /list
+7	/newlist	/newlist	Last 30 din ke naye products
+8	/newproducts	/newproducts	Same as /newlist
+9	/addproduct	/addproduct key | Full Name | Price	Naya product add karo
+10	/rate	/rate key newprice	Product ka rate update karo
+11	/rename	/rename key New Full Name	Product ka naam badlo
+12	/customrate	/customrate 923001234567 key price	VIP special rate set karo
+13	/customrate	/customrate 923001234567 key cancel	VIP rate hataao
+14	/customlist	/customlist	Saare VIP rates dekho
+15	/seed	/seed	Default rates DB me reset karo
+🟢 PART 2: Non-Slash Commands (Owner)
 #	Command	Kaam
-1	off	Specific chat me bot pause karo
-2	stop	Same as off
-3	on	Chat me bot resume karo
-4	start	Same as on
-5	gon	Group me bot ON
-6	groupchaton	Same as gon
-7	goff	Group me bot OFF
-8	groupchatoff	Same as goff
+1	off or stop	Specific chat me bot pause karo
+2	on or start	Chat me bot resume karo
+3	gon or groupchaton	Group me bot ON
+4	goff or groupchatoff	Group me bot OFF
 📖 Har Command Ki Detail (Example Ke Saath)
+🔹 /selfchat — Apna "You" Number Set Karein (SABSE PEHLE!)
+Kaam: Aap jab apne "You" chat me commands bhejenge, toh woh delete nahi honge.
+
+text
+/selfchat 923001234567
+Reply:
+
+text
+✅ Self-Chat Protection SET!
+
+👤 Number: `923001234567`
+
+ℹ️ Ab is number ki "You" chat me kuch bhi delete NAHI hoga.
+
+📋 Cancel: /selfchat cancel
+📋 Show: /selfchat show
+Cancel karne ke liye:
+
+text
+/selfchat cancel
+Status check karne ke liye:
+
+text
+/selfchat show
 🔹 /list ya /rates ya /ratelist
 Kaam: Poori current rate list dikhata hai
 
@@ -57,9 +97,9 @@ text
 
 🆕 *Universal Socket (10A)* (`usocket`)
    🏷️ Rate jaan'ne ke liye quantity bata dein.
-   📅 10/4/2026
-🔹 /addproduct
-Kaam: Naya product add karo (3 parts | se separate)
+   📅 04/10/2026
+🔹 /addproduct — Naya Product Add Karein
+Kaam: Naya product list me shamil karo (3 parts | se separate)
 
 text
 /addproduct usocket | Universal Socket (10A) | Qty batao
@@ -72,8 +112,18 @@ text
 📦 Key: `usocket`
 📛 Name: Universal Socket (10A)
 🏷️ Price: Qty batao
-🔹 /rate
-Kaam: Kisi existing product ka rate update karo
+⚠️ Zaroori:
+
+Key = chhota naam (jaise usocket, wifi, board)
+
+Full Name = poora product naam
+
+Price = rate
+
+3 parts | (pipe) se separate hone chahiye
+
+🔹 /rate — Rate Update Karein
+Kaam: Kisi existing product ka rate change karo
 
 text
 /rate wifi 4500
@@ -83,7 +133,7 @@ text
 ✅ Rate Updated!
 📦 `wifi`
 🏷️ Rs. 4500
-🔹 /rename
+🔹 /rename — Product Ka Naam Badlein
 Kaam: Product ka naam change karo (rate same rahega)
 
 text
@@ -94,8 +144,8 @@ text
 ✅ Name Updated!
 📦 `wifi`
 🏷️️ Smart Touch Switch 6-Button
-🔹 /customrate (SET)
-Kaam: Kisi specific customer ko special/VIP rate dena
+🔹 /customrate (SET) — VIP Customer Ko Special Rate
+Kaam: Kisi specific customer ko special/VIP discount rate dena
 
 text
 /customrate 923001234567 wifi 4000
@@ -105,20 +155,21 @@ Reply:
 
 text
 ✅ Custom Rate Set!
+
 👤 Customer: `923001234567`
 📦 Product: `wifi`
 🏷️ Special Rate: Rs. 4000
 
 ℹ️ Ab jab yeh customer poochega, yeh rate hi batayega.
-⚠️ Number Format:
+⚠️ Number Format (koi bhi chalega, auto-convert ho jayega):
 
-923001234567 ✅ (best)
+✅ 923001234567 (best)
 
-03001234567 ✅ (auto-convert hoga)
+✅ 03001234567
 
-+923001234567 ✅ (auto-convert hoga)
+✅ +923001234567
 
-🔹 /customrate (CANCEL)
+🔹 /customrate (CANCEL) — VIP Rate Hataayein
 Kaam: VIP rate cancel karo, normal rate wapas laao
 
 text
@@ -132,10 +183,11 @@ Reply:
 
 text
 ✅ Custom Rate Cancelled!
+
 👤 Customer: `923001234567`
 📦 Product: `wifi`
 ℹ️ Ab normal rates show honge.
-🔹 /customlist
+🔹 /customlist — Saare VIP Rates Dekhein
 Kaam: Saare active VIP rates ki list
 
 text
@@ -147,8 +199,8 @@ text
 
 👤 923001234567 | 📦 `wifi` ➔ 🏷️ Rs. 4000
 👤 923009999999 | 📦 `board` ➔ 🏷️ Rs. 2000
-🔹 /seed
-Kaam: Default products ki rates DB me reset karein
+🔹 /seed — Default Rates Reset Karein
+Kaam: Bot ke default products aur rates DB me reset karo
 
 text
 /seed
@@ -164,40 +216,48 @@ Rates ghalat ho gaye hon
 
 Fresh start chahiye
 
-🔹 off / stop
-Kaam: Specific customer chat me bot pause karo
+🔹 off / stop — Bot Pause Karein (Specific Customer)
+Kaam: Kisi customer ke chat me bot ko pause karo
 
 text
 off
 Kya hota hai: Us chat me AI reply dena band kar dega
 
-🔹 on / start
+⚠️ Note: Yeh command customer ke chat me bhejein (apne "You" chat me nahi)
+
+🔹 on / start — Bot Resume Karein
 Kaam: Bot ko dobara activate karo
 
 text
 on
 Kya hota hai: AI phir se replies dega
 
-🔹 gon / groupchaton
+🔹 gon / groupchaton — Group Me Bot ON
 Kaam: Group me bot ko active karo
 
 text
 gon
-Kya hota hai: Us group me bot replies dega (default me groups silent hote hain)
+Kya hota hai: Us group me bot replies dega
+(Default me groups silent hote hain — koi reply nahi karta)
 
-🔹 goff / groupchatoff
+🔹 goff / groupchatoff — Group Me Bot OFF
 Kaam: Group me bot band karo
 
 text
 goff
 🎯 Quick Reference Card (Copy-Paste Ready)
-bash
+text
+# ============ SELF-CHAT SETUP (Sabse Pehle) ============
+/selfchat 923001234567                 # Apna number set karo
+/selfchat show                         # Status dekho
+/selfchat cancel                       # Protection hataao
+
 # ============ LIST & RATES ============
-/list                              # Full rate list
-/rates                             # Alias of /list
-/ratelist                          # Alias of /list
-/newlist                           # Recently added products (30 days)
-/newproducts                       # Alias of /newlist
+/list                                  # Full rate list
+/rates                                 # Alias of /list
+/ratelist                              # Alias of /list
+/newlist                               # Recently added products (30 days)
+/newproducts                           # Alias of /newlist
 
 # ============ ADD / UPDATE / RENAME ============
 /addproduct key | Full Name | Price    # Add new product
@@ -210,15 +270,18 @@ bash
 /customlist                            # Show all VIP rates
 
 # ============ SYSTEM ============
-/seed                              # Reset to default rates
+/seed                                  # Reset to default rates
 
 # ============ CHAT CONTROLS ============
-off                                # Pause bot (specific chat)
-on                                 # Resume bot
-gon                                # Group bot ON
-goff                               # Group bot OFF
+off                                    # Pause bot (specific chat)
+on                                     # Resume bot
+gon                                    # Group bot ON
+goff                                   # Group bot OFF
 📊 Saare Commands Ka Summary Table
 Command	Type	Kaam	Delete Hoga?
+/selfchat <number>	Setup	Apna number set	✅ (hamesha)
+/selfchat show	Info	Status dekho	✅ (hamesha)
+/selfchat cancel	Setup	Protection hataao	✅ (hamesha)
 /list	Info	Rate list dekho	Self: ❌ / Customer: ✅
 /rates	Info	Rate list dekho	Self: ❌ / Customer: ✅
 /ratelist	Info	Rate list dekho	Self: ❌ / Customer: ✅
@@ -235,16 +298,32 @@ off / stop	Control	Bot pause	Self: ❌ / Customer: ✅
 on / start	Control	Bot resume	Self: ❌ / Customer: ✅
 gon	Group	Group ON	✅ (hamesha)
 goff	Group	Group OFF	✅ (hamesha)
-Note:
+Notes:
 
 Self chat = Aap apne "Message Yourself" me type karein → kuch delete nahi hoga
 
 Customer chat = Customer ke chat me aap command bhejein → auto-delete ho jayega
 
-Group commands = Hamesha delete honge (taakay kisi ko pata na chale)
+Group commands = hamesha delete honge (taakay kisi ko pata na chale)
+
+/selfchat = Yeh command hamesha delete hogi (chahe kahin bhi bhejein)
 
 💡 Real-Life Usage Scenarios
-Scenario 1: Naya Product Add Karna
+📌 Scenario 1: Pehli Baar Setup Karna
+text
+1. Bot start karein (terminal me QR scan karein)
+
+2. Apne "Message Yourself" chat me bhejein:
+   /selfchat 923001234567
+   
+3. Confirmation aayegi:
+   ✅ Self-Chat Protection SET!
+   
+4. Ab test karein — bhejein:
+   /list
+   
+5. ✅ Rate list aayegi aur WAHI RAHEGI (delete nahi hogi)
+📌 Scenario 2: Naya Product Add Karna
 text
 1. Apne chat me bhejein:
    /addproduct usocket | Universal Socket (10A) | Qty batao
@@ -252,7 +331,7 @@ text
 2. Confirm reply aayegi (self chat me rahegi)
 3. Customer poochega "Universal Socket ka rate?" 
    → AI full name bolega: "Universal Socket (10A)"
-Scenario 2: VIP Customer Ko Discount Dena
+📌 Scenario 3: VIP Customer Ko Discount Dena
 text
 1. Apne chat me bhejein:
    /customrate 923001234567 wifi 4000
@@ -261,14 +340,14 @@ text
    → AI bolega: "Rs. 4000" (special rate)
    
 3. Baaki customers ko normal "Rs. 4,500" batayega
-Scenario 3: Rate Change Karna
+📌 Scenario 4: Rate Change Karna
 text
 1. Apne chat me bhejein:
    /rate wifi 5000
    
 2. Ab sab customers ko naya rate "Rs. 5000" batayega
    (Except VIP customers jinke custom rate set hain)
-Scenario 4: Kisi Customer Ka Bot Band Karna
+📌 Scenario 5: Kisi Customer Ka Bot Band Karna
 text
 1. Us customer ke chat me (aap ke WhatsApp se) bhejein:
    off
@@ -278,7 +357,7 @@ text
 
 4. Dobara chalu karne ke liye:
    on
-Scenario 5: Group Me Bot Activate Karna
+📌 Scenario 6: Group Me Bot Activate Karna
 text
 Default: Groups silent hain
 
@@ -289,15 +368,42 @@ Default: Groups silent hain
 
 2. Band karne ke liye:
    goff
-⚠️ Command Tips
-Space sahi rakhein: /rate wifi 4500 (theek hai) vs /ratewifi4500 (galat)
+⚠️ Command Tips (Zaroori Baatein)
+✅ Space sahi rakhein:
 
-Pipe | zaroori hai /addproduct me: /addproduct key | Name | Price
+/rate wifi 4500 (theek hai)
 
-Numbers normalize ho jaate hain: 0300... ya +92300... sab 92300... me convert
+/ratewifi4500 (galat)
 
-Cancel ke 3 alfaaz: cancel, reset, delete — koi bhi chalega
+✅ Pipe | zaroori hai /addproduct me:
 
-Self chat me test karein pehle, phir customer pe use karein
+/addproduct key | Name | Price
 
-Bhai bas! Yeh poori list hai saari / wali keys ki. Total 12 slash commands aur 4 non-slash commands hain. Har ek ka format, example, aur usage likh diya hai. 🚀
+✅ Numbers normalize ho jaate hain:
+
+0300..., +92300..., 92300... — sab chalega
+
+✅ Cancel ke 3 alfaaz:
+
+cancel, reset, delete — koi bhi chalega
+
+✅ Self chat me test karein pehle, phir customer pe use karein
+
+✅ /selfchat command sabse pehle set karein — iske baad hi aap apne "You" chat me baaki commands use karein
+
+🆘 Common Problems & Solutions
+Problem	Solution
+Commands delete ho rahe hain "You" chat me	/selfchat <apna_number> bhejein
+Customer ko naya rate nahi dikh raha	/customrate <number> <key> <price> bhejein
+Naya product AI nahi bata raha	/addproduct se add karein, phir test karein
+Bot reply nahi de raha	on bhejein us chat me
+Group me reply nahi kar raha	gon bhejein group me
+Purane rates ghalat ho gaye	/seed bhejein
+📞 Support
+Agar koi problem ho ya koi command samajh na aaye, toh terminal me debug logs dekhein — wahan saaf saaf likha hoga kya ho raha hai.
+
+Bot Status Check: https://your-bot-url.onrender.com/ping
+(agar Render pe deploy hai toh)
+
+© Arain Bros, Inc. — Sargodha, Punjab, Pakistan
+Electric & Smart Switch Store
