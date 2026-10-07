@@ -1,6 +1,6 @@
 // ============================================================
-// ARRAIN BROS INC. - WhatsApp AI Sales Executive Bot (v3.4)
-// PC/Web Compatible + Mobile + All Features + Debug Logs
+// ARRAIN BROS INC. - WhatsApp AI Sales Executive Bot (v3.5 FINAL)
+// PC/Web + Mobile Compatible + Fixed on/off Delete + Debug Logs
 // ============================================================
 
 require('dotenv').config();
@@ -120,11 +120,8 @@ async function useMongoDBAuthState(collection) {
 // ============================================================
 function cleanJidNumber(rawJid) {
     if (!rawJid) return '';
-    // Remove @domain
     let num = String(rawJid).split('@')[0];
-    // Remove :device suffix (like :12)
     num = num.split(':')[0];
-    // Remove all non-digits
     num = num.replace(/\D/g, '');
     return num;
 }
@@ -138,7 +135,7 @@ function normalizePhone(raw) {
 }
 
 // ============================================================
-// ✅ STRONG SELF-CHAT DETECTOR (PC/Web + Mobile Compatible)
+// STRONG SELF-CHAT DETECTOR (PC/Web + Mobile)
 // ============================================================
 function detectSelfChat(sock, sender, ownerNumber) {
     const senderClean = cleanJidNumber(sender);
@@ -155,7 +152,7 @@ function detectSelfChat(sock, sender, ownerNumber) {
     console.log(`      my:     clean="${myClean}" norm="${myNorm}"`);
     console.log(`      owner:  raw="${ownerNumber || 'NULL'}" clean="${ownerClean}" norm="${ownerNorm}"`);
 
-    // Match 1: sender == bot number (direct)
+    // Match 1: sender == bot number
     if (myClean && senderClean && myClean === senderClean) {
         console.log(`      ✅ Match 1: sender == bot number`);
         return true;
@@ -167,19 +164,19 @@ function detectSelfChat(sock, sender, ownerNumber) {
         return true;
     }
 
-    // Match 3: sender == owner number (direct)
+    // Match 3: sender == owner number
     if (ownerClean && senderClean && ownerClean === senderClean) {
-        console.log(`      ✅ Match 3: sender == owner number`);
+        console.log(`      ✅ Match 3: sender == owner`);
         return true;
     }
 
-    // Match 4: sender == owner number (normalized)
+    // Match 4: sender == owner (normalized)
     if (ownerNorm && senderNorm && ownerNorm === senderNorm) {
         console.log(`      ✅ Match 4: sender == owner (normalized)`);
         return true;
     }
 
-    // Match 5: Last 10 digits comparison (handles all formats)
+    // Match 5: Last 10 digits comparison
     if (senderClean.length >= 10) {
         const senderLast10 = senderClean.slice(-10);
         if (ownerClean.length >= 10 && senderLast10 === ownerClean.slice(-10)) {
@@ -208,9 +205,9 @@ function detectSelfChat(sock, sender, ownerNumber) {
         }
     }
 
-    // Match 7: @lid format (PC/Web pe bahut common)
+    // Match 7: @lid format (PC/Web)
     if (sender.includes('@lid')) {
-        console.log(`      ✅ Match 7: @lid format — self-chat`);
+        console.log(`      ✅ Match 7: @lid format`);
         return true;
     }
 
@@ -411,6 +408,20 @@ function checkForVoiceRequest(text) {
 }
 
 // ============================================================
+// ✅ FIXED: Explicit Delete Helper (with logs)
+// ============================================================
+async function deleteMessage(sock, sender, m, label = 'message') {
+    try {
+        await sock.sendMessage(sender, { delete: m.key });
+        console.log(`   🗑️  Deleted ${label}`);
+        return true;
+    } catch (e) {
+        console.log(`   ⚠️  Delete failed for ${label}: ${e.message}`);
+        return false;
+    }
+}
+
+// ============================================================
 // OWNER COMMAND HANDLER
 // ============================================================
 async function handleOwnerCommand(sock, m, text, sender) {
@@ -421,11 +432,13 @@ async function handleOwnerCommand(sock, m, text, sender) {
     const isSelfChat = detectSelfChat(sock, sender, ownerSelfNumber);
     console.log(`   🎯 isSelfChat = ${isSelfChat}\n`);
 
-    const deleteCommandMsg = async () => {
+    // Helper: silently delete command (only in customer chats)
+    const deleteCommandMsg = async (label = 'command') => {
         if (isSelfChat) return;
-        try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) {}
+        await deleteMessage(sock, sender, m, label);
     };
 
+    // Helper: auto-delete bot reply (only in customer chats)
     const autoDelete = async (sentMsg, delay = 5000) => {
         if (isSelfChat) return;
         setTimeout(async () => {
@@ -437,7 +450,8 @@ async function handleOwnerCommand(sock, m, text, sender) {
     // /selfchat COMMAND
     // ============================================================
     if (text.startsWith('/selfchat')) {
-        try { await sock.sendMessage(sender, { delete: m.key }); } catch (e) {}
+        // /selfchat command HAMESHA delete hogi (chahe self ho ya customer)
+        await deleteMessage(sock, sender, m, '/selfchat command');
 
         const parts = text.split(' ').filter(p => p.trim().length > 0);
         const arg = parts[1] ? parts[1].toLowerCase() : '';
@@ -511,22 +525,43 @@ async function handleOwnerCommand(sock, m, text, sender) {
         return true;
     }
 
-    // -------- ON / OFF --------
+    // ============================================================
+    // ✅ FIXED: ON / OFF — Selfchat me visible, customer me delete
+    // ============================================================
     if (cleanText === 'off' || cleanText === 'stop') {
         pausedChats.add(sender);
-        await deleteCommandMsg();
+
+        console.log(`   🚫 OFF command triggered`);
+        console.log(`   📍 isSelfChat: ${isSelfChat}`);
+
+        if (!isSelfChat) {
+            console.log(`   🗑️  Deleting OFF (customer chat)`);
+            await deleteMessage(sock, sender, m, 'OFF command');
+        } else {
+            console.log(`   ✅ OFF kept (self chat)`);
+        }
         return true;
     }
+
     if (cleanText === 'on' || cleanText === 'start') {
         pausedChats.delete(sender);
         chatHistories[sender] = [];
-        await deleteCommandMsg();
+
+        console.log(`   ✅ ON command triggered`);
+        console.log(`   📍 isSelfChat: ${isSelfChat}`);
+
+        if (!isSelfChat) {
+            console.log(`   🗑️  Deleting ON (customer chat)`);
+            await deleteMessage(sock, sender, m, 'ON command');
+        } else {
+            console.log(`   ✅ ON kept (self chat)`);
+        }
         return true;
     }
 
     // -------- /addproduct --------
     if (text.startsWith('/addproduct')) {
-        await deleteCommandMsg();
+        await deleteCommandMsg('/addproduct command');
         const rawContent = text.replace('/addproduct', '').trim();
         const parts = rawContent.split('|').map(p => p.trim());
 
@@ -561,7 +596,7 @@ async function handleOwnerCommand(sock, m, text, sender) {
 
     // -------- /newlist --------
     if (cleanText === '/newlist' || cleanText === '/newproducts') {
-        await deleteCommandMsg();
+        await deleteCommandMsg('/newlist command');
         const recentText = await getRecentProducts(30);
         if (!recentText) {
             const sentMsg = await sock.sendMessage(sender, {
@@ -579,7 +614,7 @@ async function handleOwnerCommand(sock, m, text, sender) {
 
     // -------- /customrate --------
     if (text.startsWith('/customrate')) {
-        await deleteCommandMsg();
+        await deleteCommandMsg('/customrate command');
         const parts = text.split(' ').filter(p => p.trim().length > 0);
 
         if (parts.length >= 4) {
@@ -639,7 +674,7 @@ async function handleOwnerCommand(sock, m, text, sender) {
 
     // -------- /customlist --------
     if (cleanText === '/customlist') {
-        await deleteCommandMsg();
+        await deleteCommandMsg('/customlist command');
         const list = await customRatesCollection.find({}).toArray();
         let outStr = list.length === 0
             ? "ℹ️ Koi custom rate active nahi hai."
@@ -654,7 +689,7 @@ async function handleOwnerCommand(sock, m, text, sender) {
 
     // -------- /rate --------
     if (text.startsWith('/rate') && !text.startsWith('/ratelist')) {
-        await deleteCommandMsg();
+        await deleteCommandMsg('/rate command');
         const parts = text.split(' ');
         if (parts.length >= 3) {
             const nickname = parts[1].toLowerCase();
@@ -692,7 +727,7 @@ async function handleOwnerCommand(sock, m, text, sender) {
 
     // -------- /rename --------
     if (text.startsWith('/rename')) {
-        await deleteCommandMsg();
+        await deleteCommandMsg('/rename command');
         const parts = text.split(' ');
         if (parts.length >= 3) {
             const nickname = parts[1].toLowerCase();
@@ -727,7 +762,7 @@ async function handleOwnerCommand(sock, m, text, sender) {
 
     // -------- /list /rates /ratelist --------
     if (['/list', '/rates', '/ratelist'].includes(cleanText)) {
-        await deleteCommandMsg();
+        await deleteCommandMsg('/list command');
         const currentRatesText = await getDynamicProductsText();
         const sentMsg = await sock.sendMessage(sender, {
             text: `📋 *Current Product & Rates:*\n\n${currentRatesText}`
@@ -738,7 +773,7 @@ async function handleOwnerCommand(sock, m, text, sender) {
 
     // -------- /seed --------
     if (cleanText === '/seed') {
-        await deleteCommandMsg();
+        await deleteCommandMsg('/seed command');
         for (const key of Object.keys(defaultProducts)) {
             await ratesCollection.updateOne(
                 { nickname: key },
@@ -870,7 +905,7 @@ async function startBot() {
         });
 
         // ============================================================
-        // ✅ UPDATED MESSAGE HANDLER (PC/Web + Mobile Compatible)
+        // MESSAGE HANDLER (PC/Web + Mobile Compatible)
         // ============================================================
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
             if (type !== 'notify') return;
@@ -883,14 +918,12 @@ async function startBot() {
             processedMessages.add(msgId);
             if (processedMessages.size > 1000) processedMessages.clear();
 
-            // ✅ PC/Web friendly: use remoteJid consistently
             const remoteJid = m.key.remoteJid || '';
             const isGroup = remoteJid.endsWith('@g.us');
             const isFromMe = !!m.key.fromMe;
             const isAudio = !!m.message.audioMessage;
             const text = (m.message.conversation || m.message.extendedTextMessage?.text || "").trim();
 
-            // ✅ Debug log for every message
             console.log(`\n📨 [Message]`);
             console.log(`   remoteJid: "${remoteJid}"`);
             console.log(`   participant: "${m.key.participant || 'N/A'}"`);
@@ -906,7 +939,7 @@ async function startBot() {
                 if (!allowedGroups.has(remoteJid)) return;
             }
 
-            // OWNER COMMANDS (PC/Web compatible)
+            // OWNER COMMANDS
             if (isFromMe && text && !isGroup) {
                 const handled = await handleOwnerCommand(sock, m, text, remoteJid);
                 if (handled) return;
@@ -917,9 +950,7 @@ async function startBot() {
             if (!isAudio && !text) return;
             if (isFromMe) return;
 
-            // Use remoteJid as chat key
             const chatKey = remoteJid;
-
             if (!chatHistories[chatKey]) chatHistories[chatKey] = [];
 
             try {
@@ -965,11 +996,10 @@ async function startBot() {
                     chatHistories[chatKey].shift();
                 }
 
-                // Working Gemini models
                 const modelsToTry = [
-                    "gemini-3.5-flash-lite",
-                    "gemini-3.5-flash",
-                    "gemini-3.1-flash-lite",
+                    "gemini-2.0-flash-lite",
+                    "gemini-2.0-flash",
+                    "gemini-2.5-flash-lite",
                     "gemini-2.5-flash",
                     "gemini-flash-lite-latest",
                     "gemini-flash-latest"
