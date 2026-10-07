@@ -1,6 +1,6 @@
 // ============================================================
-// ARRAIN BROS INC. - WhatsApp AI Sales Executive Bot (v3.5 FINAL)
-// PC/Web + Mobile Compatible + Fixed on/off Delete + Debug Logs
+// ARRAIN BROS INC. - WhatsApp AI Sales Executive Bot (v3.6 FINAL)
+// PC/Web + Mobile + Advanced Prompt + Fixed on/off Delete
 // ============================================================
 
 require('dotenv').config();
@@ -135,7 +135,7 @@ function normalizePhone(raw) {
 }
 
 // ============================================================
-// STRONG SELF-CHAT DETECTOR (PC/Web + Mobile)
+// STRONG SELF-CHAT DETECTOR
 // ============================================================
 function detectSelfChat(sock, sender, ownerNumber) {
     const senderClean = cleanJidNumber(sender);
@@ -152,31 +152,26 @@ function detectSelfChat(sock, sender, ownerNumber) {
     console.log(`      my:     clean="${myClean}" norm="${myNorm}"`);
     console.log(`      owner:  raw="${ownerNumber || 'NULL'}" clean="${ownerClean}" norm="${ownerNorm}"`);
 
-    // Match 1: sender == bot number
     if (myClean && senderClean && myClean === senderClean) {
         console.log(`      ✅ Match 1: sender == bot number`);
         return true;
     }
 
-    // Match 2: sender == bot number (normalized)
     if (myNorm && senderNorm && myNorm === senderNorm) {
         console.log(`      ✅ Match 2: sender == bot (normalized)`);
         return true;
     }
 
-    // Match 3: sender == owner number
     if (ownerClean && senderClean && ownerClean === senderClean) {
         console.log(`      ✅ Match 3: sender == owner`);
         return true;
     }
 
-    // Match 4: sender == owner (normalized)
     if (ownerNorm && senderNorm && ownerNorm === senderNorm) {
         console.log(`      ✅ Match 4: sender == owner (normalized)`);
         return true;
     }
 
-    // Match 5: Last 10 digits comparison
     if (senderClean.length >= 10) {
         const senderLast10 = senderClean.slice(-10);
         if (ownerClean.length >= 10 && senderLast10 === ownerClean.slice(-10)) {
@@ -189,23 +184,15 @@ function detectSelfChat(sock, sender, ownerNumber) {
         }
     }
 
-    // Match 6: Variant matching
     if (ownerNumber) {
-        const ownerVariants = [
-            ownerClean, ownerNorm,
-            `+${ownerNorm}`, `0${ownerNorm.slice(2)}`, `92${ownerNorm.slice(2)}`
-        ];
-        const senderVariants = [
-            senderClean, senderNorm,
-            `+${senderNorm}`, `0${senderNorm.slice(2)}`, `92${senderNorm.slice(2)}`
-        ];
+        const ownerVariants = [ownerClean, ownerNorm, `+${ownerNorm}`, `0${ownerNorm.slice(2)}`, `92${ownerNorm.slice(2)}`];
+        const senderVariants = [senderClean, senderNorm, `+${senderNorm}`, `0${senderNorm.slice(2)}`, `92${senderNorm.slice(2)}`];
         if (ownerVariants.some(v => v && senderVariants.includes(v))) {
             console.log(`      ✅ Match 6: variant match`);
             return true;
         }
     }
 
-    // Match 7: @lid format (PC/Web)
     if (sender.includes('@lid')) {
         console.log(`      ✅ Match 7: @lid format`);
         return true;
@@ -304,100 +291,151 @@ async function getRecentProducts(days = 30) {
 }
 
 // ============================================================
-// SYSTEM PROMPT
+// ✅ ADVANCED SYSTEM PROMPT (v3.6)
 // ============================================================
 function getSystemPrompt(productsListText) {
     return `
-You are an experienced, sharp, and polite Sales Executive for "Arain Bros, Inc." (Electric & Smart Switch Store) based in Sargodha, Punjab, Pakistan. You handle customer chats on WhatsApp.
+You are "Arain Bros Sales Executive" — an experienced, sharp, polite, and intelligent salesperson for "Arain Bros, Inc." — a trusted Electric & Smart Switch Store in Sargodha, Punjab, Pakistan. You handle WhatsApp customer chats.
 
-==================================================
-1. LOCAL MARKET DEALING & BEHAVIOR RULES
-==================================================
-- FAST & DIRECT: Local customers prefer quick, short, to-the-point replies.
-- NO REPETITIVE GREETINGS: Only say "Wa'alaikumsalam" if user greets FIRST.
-- NO ROBOTIC FLUFF: Avoid formal corporate intros.
-- RESPECTFUL LANGUAGE: Use "Aap", "G bilkul", "Ji haan", "Bhai", "Sir".
-- CONVERSATION FLOW: Read history first. Track what customer is asking.
+═══════════════════════════════════════════════════════
+🎯 CORE IDENTITY & TONE
+═══════════════════════════════════════════════════════
+- You are a REAL human sales executive, not a robot.
+- You speak Natural Roman Urdu (Pakistani WhatsApp style).
+- You're warm, respectful, and confident — like a shop manager who knows his products.
+- Use "Aap", "Bhai", "Sir", "Ji haan", "G bilkul", "Ji bataiye".
+- NEVER sound corporate or formal. NEVER use robotic phrases like "Main aap ki poori rehnumai ke liye hazir hoon".
 
-==================================================
-2. LANGUAGE STYLE
-==================================================
-- TEXT MODE: Natural Roman Urdu, short lines, bullet points, bold prices.
-- VOICE MODE: Clear Urdu script (اردو رسم الخط), 2-3 complete sentences.
+═══════════════════════════════════════════════════════
+⚡ RULE #1 (MOST IMPORTANT): NEVER REPEAT CUSTOMER'S WORDS
+═══════════════════════════════════════════════════════
+❌ WRONG BEHAVIOR (Yeh kabhi nahi karna):
+  Customer: "Hello, G batayein?"
+  AI: "Wa'alaikumsalam, G batayein?" ← GALAT! Customer ke words repeat kiye
+  
+  Customer: "Kya hai?"
+  AI: "Kya hai?" ← GALAT!
+  
+  Customer: "A/s"
+  AI: "A/s" ← GALAT!
 
-==================================================
-3. ⚠️ CRITICAL RULE: NEVER REPEAT CUSTOMER'S WORDS
-==================================================
-- NEVER just repeat what the customer said. 
-  ❌ WRONG: Customer says "Hello, G batayein?" → AI replies "Wa'alaikumsalam, G batayein?"
-  ✅ RIGHT: Customer says "Hello, G batayein?" → AI replies with a warm greeting + product menu
+✅ CORRECT BEHAVIOR:
+  Customer: "Hello, G batayein?"
+  AI: "Wa'alaikumsalam! Ji bataiye, hum Electric aur Smart Switches ka kaam karte hain. Aap ko kya chahiye — Wi-Fi Smart Switch, Standard Switch, Board, ya Circuit Breaker?"
+  
+  Customer: "Kya hai aap ke paas?"
+  AI: "Ji! Hum yeh sab bechte hain: [list products]"
+  
+  Customer: "A/s"
+  AI: "Wa'alaikumsalam! Ji bataiye, kya chahiye aap ko?"
 
-- If customer's message is VAGUE / unclear (like "G batayein?", "Kya hai?", "Batao", "Hello", "Salam"):
-  → Give a polite greeting + show what you sell + ask what they need
-  → Example reply: "Wa'alaikumsalam! Ji bataiye, hum Electric aur Smart Switches ka kaam karte hain. Aap ko kya chahiye — WiFi smart switch, normal switch, board, ya circuit breaker?"
+RULE: Agar customer ka message VAGUE / UNCLEAR hai (sirf greeting, "kya hai?", "batao", "salam", "hello", etc.), toh tum:
+  1. Polite greeting wapas do
+  2. Batao ke tum kya bechte ho (products ka short intro)
+  3. Pucho ke customer ko kya chahiye
 
-- If customer asks something clear (like "wifi switch ka rate?"):
-  → Give the exact price from the catalog below
+═══════════════════════════════════════════════════════
+🎭 CONVERSATION INTELLIGENCE
+═══════════════════════════════════════════════════════
+1. **History Yaad Rakho**: Pichle 10 messages padho. Customer kya pooch raha tha — uska context samjho.
+2. **Short & Direct**: Local customers lambi baatein pasand nahi karte. 2-4 lines max. Bullet points use karo.
+3. **Smart Inference**: Agar customer "wifi wala" bole, toh samjho woh "Wi-Fi Touch Smart Switch" maang raha hai.
+4. **Full Product Names**: Hamesha POORA naam use karo:
+   ✅ "Wi-Fi Touch Smart Switch (App & Voice Control)"
+   ❌ "wifi" ya "socket"
 
-==================================================
-4. PRODUCT LIST RULES (VERY IMPORTANT!)
-==================================================
-- ALWAYS quote the FULL product name (not just last word).
-  ✅ CORRECT: "Universal Socket (10A)"
-  ❌ WRONG: "Socket" or "Universal"
+═══════════════════════════════════════════════════════
+📋 PRODUCT & PRICING RULES
+═══════════════════════════════════════════════════════
+- Jab customer kisi product ka rate pooche → EXACT rate batao from the list below
+- Jab customer "koi naya product?" pooche → Recently added products list karo (agar available ho)
+- Jab customer bulk/wholesale maange → Management se best package ka wada karo
 
-- When customer asks "Koi naya product?" / "New items?" / "Kya naya hai?":
-  → Politely list NEWLY ADDED products with FULL names.
-  → If none new, share a couple of popular items from the full list.
-
-- When customer asks about ANY product, use the EXACT name from the list below.
-- If customer shortens (e.g. "wifi switch"), map to the full name from list.
-
-==================================================
-5. CATALOG & PRICING (FOR THIS CUSTOMER)
-==================================================
-Store: Sargodha, Punjab, Pakistan.
-Business Hours: 10:00 AM - 9:00 PM (PKT).
+═══════════════════════════════════════════════════════
+📦 CATALOG (YOUR PRODUCTS & RATES)
+═══════════════════════════════════════════════════════
+Store: Arain Bros, Inc. — Sargodha, Punjab, Pakistan
+Business Hours: 10:00 AM - 9:00 PM (PKT)
+Delivery: Sargodha City (same-day COD) | All Pakistan (TCS/Leopards 2-4 days)
 
 ${productsListText}
 
-⭐ Products marked "Special Rate" are VIP/custom rates for THIS customer. Always quote these.
+⭐ Products marked "Special Rate" are VIP rates for THIS specific customer — always quote these.
 
-==================================================
-6. DELIVERY & PAYMENT
-==================================================
-- Sargodha City: Same-day/Next-day COD or shop pickup.
-- All Pakistan: TCS / Leopards within 2-4 days.
+═══════════════════════════════════════════════════════
+🤝 BARGAINING HANDLING (MOLE TOL)
+═══════════════════════════════════════════════════════
+Agar customer discount maange:
+"Bhai yeh humari final wholesale rates hain, quality A1 milegi. Agar aap bulk quantity lein ge (jaise 10+ pieces) toh management se baat karke best package zaroor de dein ge."
 
-==================================================
-7. DISCOUNT HANDLING (MOLE TOL)
-==================================================
-If customer asks discount:
-"Bhai yeh final wholesale rates hain, quality A1 milegi. Bulk quantity pe management se best package de dein ge."
+═══════════════════════════════════════════════════════
+📝 ORDER CLOSING
+═══════════════════════════════════════════════════════
+Agar customer bole "order kar do" / "pack kar do" / "bhej do":
+  1. Confirm karo: item, quantity, total bill
+  2. Maango: Naam, Poora Pata (with landmark), Mobile Number
+  
+Phir bolo: "Perfect! Main aap ka order note kar raha hoon. Delivery Sargodha me same-day hogi, out-of-city 2-4 days."
 
-==================================================
-8. ORDER CLOSING
-==================================================
-When user says "Order kar do" / "Pack kar do":
-  1. Confirm item, quantity, total bill.
-  2. Request: Naam, Poora Pata (with landmark), Mobile Number.
+═══════════════════════════════════════════════════════
+📞 HUMAN SUPPORT TRANSFER (For VIP/Bulk/Complex)
+═══════════════════════════════════════════════════════
+- Text: "Main aap ka number hamare sales manager ko pass kar raha hoon, woh aap se direct WhatsApp/Call par rabta kar lein ge."
+- Voice: "میں آپ کا نمبر ہمارے سیلز مینیجر کو پاس کر رہا ہوں، وہ آپ سے ڈائریکٹ رابطہ کر لیں گے۔"
 
-Human Support Transfer (bulk/VIP):
-  - Text: "Main aap ka number sales manager ko pass kar raha hoon, woh direct rabta kar lein ge."
-  - Voice: "میں آپ کا نمبر ہمارے سیلز مینیجر کو پاس کر رہا ہوں، وہ آپ سے ڈائریکٹ رابطہ کر لیں گے۔"
+═══════════════════════════════════════════════════════
+🗣️ VOICE vs TEXT MODE
+═══════════════════════════════════════════════════════
+- VOICE MODE: Pure Urdu script (اردو رسم الخط), 2-3 complete sentences. Natural spoken style.
+- TEXT MODE: Roman Urdu (English letters), short lines, bullet points for prices.
 
-==================================================
-9. RESPONSE EXAMPLES (Follow these patterns!)
-==================================================
-Customer: "Hello" → AI: "Wa'alaikumsalam! Ji bataiye, kya chahiye?"
-Customer: "G batayein?" → AI: "Ji bataiye! Hum Electric aur Smart Switches bechte hain — WiFi smart switch, normal switch, board, breaker. Kya chahiye aap ko?"
-Customer: "Kya rates hain?" → AI: "Ji! Yahan hamare rates hain: [list rates]"
-Customer: "Wifi ka kitna?" → AI: "Wi-Fi Touch Smart Switch (App & Voice Control) ka rate Rs. 4,500 per piece hai."
-Customer: "Salam" → AI: "Wa'alaikumsalam! Ji bataiye, kya chahiye?"
+═══════════════════════════════════════════════════════
+✅ RESPONSE EXAMPLES (Follow These!)
+═══════════════════════════════════════════════════════
+Customer: "Hello" 
+AI: "Wa'alaikumsalam! Ji bataiye, kya chahiye?"
 
-❌ NEVER DO THIS:
-Customer: "G batayein?" → AI: "G batayein?" ← YE GALAT HAI
-Customer: "Hello" → AI: "Hello" ← YE BHI GALAT HAI
+Customer: "A/s"
+AI: "Wa'alaikumsalam! Ji bataiye, kya chahiye aap ko?"
+
+Customer: "G batayein?"
+AI: "Ji bataiye! Hum Electric aur Smart Switches bechte hain — Wi-Fi Smart Switch, Normal Switch, Board, aur Circuit Breaker. Kya chahiye aap ko?"
+
+Customer: "Kya rates hain?"
+AI: "Ji! Yahan hamare rates hain:
+- Wi-Fi Smart Switch: Rs. 4,500
+- Standard Switch: Rs. 150-350
+- Board: Rs. 800-2,500
+- Circuit Breaker: Rs. 2,000-4,000
+Kaunsa product chahiye?"
+
+Customer: "wifi ka kitna?"
+AI: "Wi-Fi Touch Smart Switch (App & Voice Control) ka rate Rs. 4,500 per piece hai. Quantity kitni chahiye?"
+
+Customer: "koi naya product?"
+AI: (agar recently added hai) "Ji! Recently yeh naya product aaya hai: [product name + rate]"
+    (agar nahi hai) "Filhal koi naya product nahi aaya, lekin humare paas yeh popular products hain: [2-3 products]"
+
+Customer: "salam bhai"
+AI: "Wa'alaikumsalam! Ji bataiye, kya chahiye?"
+
+Customer: "kuch acha sa batao"
+AI: "Ji! Aap ke liye best yeh rahega — Wi-Fi Touch Smart Switch (App & Voice Control), Rs. 4,500. Yeh mobile app aur voice dono se control hota hai. Modern ghar ke liye perfect hai. Chahiye?"
+
+═══════════════════════════════════════════════════════
+❌ NEVER DO THIS
+═══════════════════════════════════════════════════════
+- Repeat customer's exact words
+- Give one-word replies
+- Sound like a robot
+- Say "Main aap ki rehnumai karta hoon" type corporate lines
+- Give wrong prices (always use the catalog above)
+- Ignore conversation history
+
+═══════════════════════════════════════════════════════
+🎯 YOUR GOAL
+═══════════════════════════════════════════════════════
+Customer ko satisfied karo, sahi info do, aur order close karo. Har message aisa ho jaise ek real dukaan ka banda WhatsApp pe baat kar raha ho.
 `;
 }
 
@@ -435,7 +473,7 @@ function checkForVoiceRequest(text) {
 }
 
 // ============================================================
-// ✅ FIXED: Explicit Delete Helper (with logs)
+// DELETE HELPER
 // ============================================================
 async function deleteMessage(sock, sender, m, label = 'message') {
     try {
@@ -459,7 +497,7 @@ async function handleOwnerCommand(sock, m, text, sender) {
     const isSelfChat = detectSelfChat(sock, sender, ownerSelfNumber);
     console.log(`   🎯 isSelfChat = ${isSelfChat}\n`);
 
-    // Helper: silently delete command (only in customer chats)
+    // Helper: silently delete command (only in customer chats) — for / commands
     const deleteCommandMsg = async (label = 'command') => {
         if (isSelfChat) return;
         await deleteMessage(sock, sender, m, label);
@@ -474,16 +512,14 @@ async function handleOwnerCommand(sock, m, text, sender) {
     };
 
     // ============================================================
-    // /selfchat COMMAND
+    // /selfchat COMMAND (Always delete)
     // ============================================================
     if (text.startsWith('/selfchat')) {
-        // /selfchat command HAMESHA delete hogi (chahe self ho ya customer)
         await deleteMessage(sock, sender, m, '/selfchat command');
 
         const parts = text.split(' ').filter(p => p.trim().length > 0);
         const arg = parts[1] ? parts[1].toLowerCase() : '';
 
-        // -- CANCEL --
         if (['cancel', 'off', 'reset', 'delete', 'remove'].includes(arg)) {
             const oldNumber = ownerSelfNumber;
             ownerSelfNumber = null;
@@ -498,7 +534,6 @@ async function handleOwnerCommand(sock, m, text, sender) {
             return true;
         }
 
-        // -- SHOW --
         if (['show', 'status', 'list'].includes(arg)) {
             const botNumber = cleanJidNumber(sock.user?.id || '');
             const sentMsg = await sock.sendMessage(sender, {
@@ -512,7 +547,6 @@ async function handleOwnerCommand(sock, m, text, sender) {
             return true;
         }
 
-        // -- SET NUMBER --
         if (arg && /^[0-9+\s-]+$/.test(arg)) {
             const newNumber = normalizePhone(arg);
             if (!newNumber || newNumber.length < 10) {
@@ -533,7 +567,7 @@ async function handleOwnerCommand(sock, m, text, sender) {
             );
 
             const sentMsg = await sock.sendMessage(sender, {
-                text: `✅ *Self-Chat Protection SET!*\n\n👤 *Number:* \`${newNumber}\`\n\nℹ️ Ab is number ki "You" chat me kuch bhi delete NAHI hoga.\n\n📋 Cancel: \`/selfchat cancel\`\n📋 Show: \`/selfchat show\``
+                text: `✅ *Self-Chat Protection SET!*\n\n👤 *Number:* \`${newNumber}\`\n\nℹ️ Ab is number ki "You" chat me **`/` wali commands** delete NAHI honge.\n\n📋 Cancel: \`/selfchat cancel\`\n📋 Show: \`/selfchat show\``
             });
             setTimeout(async () => {
                 try { await sock.sendMessage(sender, { delete: sentMsg.key }); } catch (e) {}
@@ -541,7 +575,6 @@ async function handleOwnerCommand(sock, m, text, sender) {
             return true;
         }
 
-        // -- HELP --
         const botNumber = cleanJidNumber(sock.user?.id || '');
         const sentMsg = await sock.sendMessage(sender, {
             text: `📌 *Self-Chat Help:*\n\n• \`/selfchat ${botNumber || '923001234567'}\` — Set protection\n• \`/selfchat cancel\` — Remove protection\n• \`/selfchat show\` — Current status`
@@ -553,20 +586,14 @@ async function handleOwnerCommand(sock, m, text, sender) {
     }
 
     // ============================================================
-    // ✅ FIXED: ON / OFF — Selfchat me visible, customer me delete
+    // ✅ FIXED: ON / OFF — HAMESHA DELETE (selfchat + customer)
     // ============================================================
     if (cleanText === 'off' || cleanText === 'stop') {
         pausedChats.add(sender);
 
-        console.log(`   🚫 OFF command triggered`);
-        console.log(`   📍 isSelfChat: ${isSelfChat}`);
+        console.log(`   🚫 OFF triggered — always deleting (chat: ${sender})`);
 
-        if (!isSelfChat) {
-            console.log(`   🗑️  Deleting OFF (customer chat)`);
-            await deleteMessage(sock, sender, m, 'OFF command');
-        } else {
-            console.log(`   ✅ OFF kept (self chat)`);
-        }
+        await deleteMessage(sock, sender, m, 'OFF command');
         return true;
     }
 
@@ -574,17 +601,15 @@ async function handleOwnerCommand(sock, m, text, sender) {
         pausedChats.delete(sender);
         chatHistories[sender] = [];
 
-        console.log(`   ✅ ON command triggered`);
-        console.log(`   📍 isSelfChat: ${isSelfChat}`);
+        console.log(`   ✅ ON triggered — always deleting (chat: ${sender})`);
 
-        if (!isSelfChat) {
-            console.log(`   🗑️  Deleting ON (customer chat)`);
-            await deleteMessage(sock, sender, m, 'ON command');
-        } else {
-            console.log(`   ✅ ON kept (self chat)`);
-        }
+        await deleteMessage(sock, sender, m, 'ON command');
         return true;
     }
+
+    // ============================================================
+    // ✅ / COMMANDS (Selfchat me visible, customer me delete)
+    // ============================================================
 
     // -------- /addproduct --------
     if (text.startsWith('/addproduct')) {
@@ -868,7 +893,6 @@ async function startBot() {
         customRatesCollection = db.collection('customer_custom_rates');
         selfChatCollection = db.collection('owner_self_chat');
 
-        // Load saved self-chat number
         try {
             const selfChatDoc = await selfChatCollection.findOne({ _id: 'owner' });
             if (selfChatDoc && selfChatDoc.number) {
@@ -999,6 +1023,7 @@ async function startBot() {
 2. Agar customer ne voice me "likh kar", "text me", "rate list", "list", "detail" maangi ho, toh Roman Urdu TEXT me reply do.
 3. Warna normal dialogue ke liye PURE URDU SCRIPT (اردو) me 2-3 sentences me jawab do.
 4. IMPORTANT: Product ka POORA naam use karo.
+5. NEVER customer ke words repeat karo.
 `;
                     promptPayload = [
                         {
@@ -1011,8 +1036,8 @@ async function startBot() {
                     ];
                 } else {
                     const formatInstruction = sendAsVoice
-                        ? " [INSTRUCTION]: Jawab SIRF PURE URDU SCRIPT (اردو) me 2-3 complete sentences me do. Product ka POORA naam use karo."
-                        : " [INSTRUCTION]: Jawab Roman Urdu (English alphabets) me do. Polite aur clear rakhna. Product ka POORA naam use karo (jaise 'Universal Socket (10A)', 'Wi-Fi Touch Smart Switch').";
+                        ? " [INSTRUCTION]: Jawab SIRF PURE URDU SCRIPT (اردو) me 2-3 complete sentences me do. Product ka POORA naam use karo. NEVER customer ke words repeat karo."
+                        : " [INSTRUCTION]: Jawab Roman Urdu (English alphabets) me do. Polite aur clear rakhna. Product ka POORA naam use karo (jaise 'Universal Socket (10A)', 'Wi-Fi Touch Smart Switch'). NEVER customer ke words repeat karo. Agar customer vague baat kare toh greeting + product intro do.";
                     promptPayload = text + formatInstruction;
                 }
 
@@ -1024,12 +1049,12 @@ async function startBot() {
                 }
 
                 const modelsToTry = [
-                    "gemini-2.0-flash-lite",
+                    "gemini-2.5-flash",
                     "gemini-2.0-flash",
                     "gemini-2.5-flash-lite",
-                    "gemini-2.5-flash",
-                    "gemini-flash-lite-latest",
-                    "gemini-flash-latest"
+                    "gemini-2.0-flash-lite",
+                    "gemini-flash-latest",
+                    "gemini-flash-lite-latest"
                 ];
 
                 let responseText = null;
@@ -1049,7 +1074,11 @@ async function startBot() {
                         const model = genAI.getGenerativeModel({
                             model: modelName,
                             systemInstruction: currentSystemPrompt,
-                            generationConfig: { maxOutputTokens: 500 }
+                            generationConfig: {
+                                maxOutputTokens: 500,
+                                temperature: 0.7,
+                                topP: 0.9
+                            }
                         });
 
                         const chat = model.startChat({ history: chatHistories[chatKey] });
